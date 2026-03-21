@@ -11,10 +11,17 @@ import Animated, {
 import { useGameStore } from '../store/gameStore';
 import { formatNumber, formatTime } from '../utils/format';
 import { THEME_COLORS } from '../constants/colors';
+import { playOfflineRewardSound } from '../utils/sound';
 
 export const OfflineRewardModal: React.FC = () => {
   const reward = useGameStore(s => s.pendingOfflineReward);
   const dismiss = useGameStore(s => s.dismissOfflineReward);
+  const sfxEnabled = useGameStore(s => s.settings.sfxEnabled);
+
+  const handleDismiss = (doubleIt: boolean) => {
+    if (sfxEnabled) playOfflineRewardSound();
+    dismiss(doubleIt);
+  };
 
   if (!reward || reward.coins <= 0) return null;
 
@@ -39,7 +46,7 @@ export const OfflineRewardModal: React.FC = () => {
           {/* Prominent ad button with glow effect */}
           <View style={styles.doubleButtonContainer}>
             <View style={styles.doubleGlow} />
-            <Pressable style={styles.doubleButton} onPress={() => dismiss(true)}>
+            <Pressable style={styles.doubleButton} onPress={() => handleDismiss(true)}>
               <Text style={styles.doubleEmoji}>{'\u{1F3AC}'}</Text>
               <View style={styles.doubleTextContainer}>
                 <Text style={styles.doubleTitle}>{'\u5E83\u544A\u3092\u898B\u30662\u500D\uFF01'}</Text>
@@ -51,7 +58,7 @@ export const OfflineRewardModal: React.FC = () => {
             </View>
           </View>
 
-          <Pressable style={styles.normalButton} onPress={() => dismiss(false)}>
+          <Pressable style={styles.normalButton} onPress={() => handleDismiss(false)}>
             <Text style={styles.normalText}>{formatNumber(reward.coins)} {'\u30B3\u30A4\u30F3\u3092\u53D7\u3051\u53D6\u308B'}</Text>
           </Pressable>
         </View>

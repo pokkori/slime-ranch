@@ -22,6 +22,7 @@ import { TutorialOverlay } from '../../src/components/TutorialOverlay';
 import { canMerge } from '../../src/engine/merge-logic';
 import { SlimeInstance } from '../../src/types/slime';
 import { formatNumber } from '../../src/utils/format';
+import { playMergeSound, playCoinSound, playSplitSound } from '../../src/utils/sound';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GROUND_Y = SCREEN_HEIGHT - 180;
@@ -204,6 +205,7 @@ export default function RanchScreen() {
       const merged = tryMerge(instanceId, bestId);
       if (merged) {
         triggerMergeHaptic(resultTier);
+        if (settings.sfxEnabled) playMergeSound(resultTier);
         // Screen shake for Tier 4+ results
         if (resultTier >= 4) {
           triggerScreenShake();
@@ -357,7 +359,10 @@ export default function RanchScreen() {
     // Coin tick every second
     if (now - coinTickRef.current >= 1000) {
       coinTickRef.current = now;
-      tickCoins();
+      const earned = tickCoins();
+      if (earned > 0 && useGameStore.getState().settings.sfxEnabled) {
+        playCoinSound();
+      }
     }
 
     animationRef.current = requestAnimationFrame(updatePhysics);
@@ -373,7 +378,8 @@ export default function RanchScreen() {
   const handleTap = useCallback((instanceId: string) => {
     tapSlime(instanceId);
     triggerHaptic('light');
-  }, [tapSlime, triggerHaptic]);
+    if (settings.sfxEnabled) playSplitSound();
+  }, [tapSlime, triggerHaptic, settings.sfxEnabled]);
 
   const handleLongPress = useCallback((instanceId: string) => {
     const slime = useGameStore.getState().slimes.find(s => s.instanceId === instanceId);
