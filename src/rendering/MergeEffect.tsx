@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, Pressable, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -7,12 +7,80 @@ import Animated, {
   withSpring,
   withSequence,
   withDelay,
+  withRepeat,
   Easing,
 } from 'react-native-reanimated';
 import { SLIME_MASTER } from '../constants/slimes';
 import { RARITY_COLORS } from '../constants/colors';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const PARTICLE_COUNT = 12;
+const RAINBOW_COLORS = ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#9B59B6', '#FF6B9D'];
+
+interface Particle {
+  angle: number;
+  distance: number;
+  size: number;
+  color: string;
+  delay: number;
+}
+
+function generateParticles(baseColor: string, isRare: boolean): Particle[] {
+  const count = isRare ? PARTICLE_COUNT : 8;
+  const particles: Particle[] = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    particles.push({
+      angle,
+      distance: 40 + Math.random() * (isRare ? 80 : 40),
+      size: 6 + Math.random() * (isRare ? 10 : 6),
+      color: isRare ? RAINBOW_COLORS[i % RAINBOW_COLORS.length] : baseColor,
+      delay: Math.random() * 100,
+    });
+  }
+  return particles;
+}
+
+interface ParticleDotProps {
+  particle: Particle;
+  centerX: number;
+  centerY: number;
+}
+
+const ParticleDot: React.FC<ParticleDotProps> = ({ particle, centerX, centerY }) => {
+  const progress = useSharedValue(0);
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    progress.value = withDelay(
+      particle.delay,
+      withTiming(1, { duration: 500, easing: Easing.out(Easing.quad) }),
+    );
+    opacity.value = withDelay(
+      particle.delay + 300,
+      withTiming(0, { duration: 200 }),
+    );
+  }, []);
+
+  const style = useAnimatedStyle(() => {
+    const x = centerX + Math.cos(particle.angle) * particle.distance * progress.value - particle.size / 2;
+    const y = centerY + Math.sin(particle.angle) * particle.distance * progress.value - particle.size / 2;
+    return {
+      position: 'absolute' as const,
+      left: x,
+      top: y,
+      width: particle.size,
+      height: particle.size,
+      borderRadius: particle.size / 2,
+      backgroundColor: particle.color,
+      opacity: opacity.value,
+      transform: [{ scale: 1 - progress.value * 0.5 }],
+    };
+  });
+
+  return <Animated.View style={style} />;
+};
 
 interface MergeEffectProps {
   resultMasterId: string;
@@ -35,14 +103,18 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
     return null;
   }
 
+  const particles = useMemo(() => generateParticles(master.baseColor, isRare), [master.baseColor, isRare]);
+
   const flashOpacity = useSharedValue(0);
   const slimeScale = useSharedValue(0);
   const textOpacity = useSharedValue(0);
   const bgOpacity = useSharedValue(0);
+  const ringScale = useSharedValue(0);
+  const ringOpacity = useSharedValue(0);
+  const ringRotation = useSharedValue(0);
 
   useEffect(() => {
     if (isRare) {
-      // Full-screen rare merge animation
       bgOpacity.value = withTiming(0.7, { duration: 300 });
       flashOpacity.value = withSequence(
         withTiming(0.5, { duration: 200 }),
@@ -55,14 +127,27 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
         withSpring(1, { damping: 12, stiffness: 180 }),
       ));
       textOpacity.value = withDelay(600, withTiming(1, { duration: 300 }));
+
+      // Rainbow ring
+      ringScale.value = withDelay(100, withSequence(
+        withTiming(1.2, { duration: 400, easing: Easing.out(Easing.quad) }),
+        withTiming(1, { duration: 200 }),
+      ));
+      ringOpacity.value = withDelay(100, withSequence(
+        withTiming(0.8, { duration: 200 }),
+        withDelay(600, withTiming(0, { duration: 300 })),
+      ));
+      ringRotation.value = withRepeat(
+        withTiming(360, { duration: 2000, easing: Easing.linear }),
+        -1,
+        false,
+      );
     } else {
-      // Quick inline animation
       slimeScale.value = withSequence(
         withTiming(1.4, { duration: 200 }),
         withTiming(0.85, { duration: 150 }),
         withSpring(1, { damping: 12, stiffness: 180 }),
       );
-      // Auto-complete after animation
       setTimeout(onComplete, 600);
     }
   }, []);
@@ -84,21 +169,34 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
     opacity: textOpacity.value,
   }));
 
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: ringScale.value },
+      { rotate: `${ringRotation.value}deg` },
+    ],
+    opacity: ringOpacity.value,
+  }));
+
   if (!isRare) {
-    // Inline merge effect at midpoint
+    // Inline merge with particles
     return (
-      <Animated.View style={[styles.inlineContainer, { left: midX - 30, top: midY - 30 }, slimeStyle]}>
-        <View style={[styles.inlineSlime, {
-          width: master.baseRadius * 2,
-          height: master.baseRadius * 2,
-          borderRadius: master.baseRadius,
-          backgroundColor: master.baseColor,
-        }]} />
-      </Animated.View>
+      <View style={styles.particleLayer} pointerEvents="none">
+        {particles.map((p, i) => (
+          <ParticleDot key={i} particle={p} centerX={midX} centerY={midY} />
+        ))}
+        <Animated.View style={[styles.inlineContainer, { left: midX - 30, top: midY - 30 }, slimeStyle]}>
+          <View style={[styles.inlineSlime, {
+            width: master.baseRadius * 2,
+            height: master.baseRadius * 2,
+            borderRadius: master.baseRadius,
+            backgroundColor: master.baseColor,
+          }]} />
+        </Animated.View>
+      </View>
     );
   }
 
-  // Full-screen rare merge
+  // Full-screen rare merge with rainbow ring + particles
   const rarityColor = RARITY_COLORS[master.rarity] || '#FFF';
   const stars = '\u2605'.repeat(master.tier);
 
@@ -106,6 +204,29 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
     <Pressable style={styles.fullScreen} onPress={onComplete}>
       <Animated.View style={[styles.backdrop, bgStyle]} />
       <Animated.View style={[styles.flash, flashStyle]} />
+
+      {/* Particles */}
+      {particles.map((p, i) => (
+        <ParticleDot
+          key={i}
+          particle={p}
+          centerX={SCREEN_WIDTH / 2}
+          centerY={SCREEN_HEIGHT / 2 - 40}
+        />
+      ))}
+
+      {/* Rainbow ring */}
+      <Animated.View style={[styles.ringContainer, ringStyle]}>
+        {RAINBOW_COLORS.map((color, i) => (
+          <View
+            key={i}
+            style={[styles.ringSegment, {
+              borderColor: color,
+              transform: [{ rotate: `${i * 60}deg` }],
+            }]}
+          />
+        ))}
+      </Animated.View>
 
       <Animated.View style={[styles.centerContent, slimeStyle]}>
         <View style={[styles.rareSlime, {
@@ -116,7 +237,6 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
           borderColor: rarityColor,
           borderWidth: 3,
         }]}>
-          {/* Eyes */}
           <View style={styles.rareEyes}>
             <View style={styles.rareEye}>
               <View style={styles.rarePupil} />
@@ -154,6 +274,10 @@ const styles = StyleSheet.create({
   },
   flash: {
     ...StyleSheet.absoluteFillObject,
+  },
+  particleLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 50,
   },
   centerContent: {
     justifyContent: 'center',
@@ -230,5 +354,20 @@ const styles = StyleSheet.create({
   },
   inlineSlime: {
     overflow: 'hidden',
+  },
+  ringContainer: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ringSegment: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 3,
+    borderStyle: 'dashed',
   },
 });

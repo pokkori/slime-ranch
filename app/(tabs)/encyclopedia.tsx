@@ -1,19 +1,19 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Platform, Share } from 'react-native';
 import { useGameStore } from '../../src/store/gameStore';
-import { SLIME_MASTER, COLOR_FAMILIES, ALL_SLIMES } from '../../src/constants/slimes';
+import { SLIME_MASTER, COLOR_FAMILIES, ALL_SLIMES, TOTAL_SLIME_COUNT } from '../../src/constants/slimes';
 import { EncyclopediaCard } from '../../src/components/EncyclopediaCard';
 import { RARITY_COLORS, THEME_COLORS } from '../../src/constants/colors';
 import { SlimeColorFamily, EncyclopediaEntry } from '../../src/types/slime';
 
 const COLOR_LABELS: Record<string, { label: string; emoji: string }> = {
-  green: { label: '草原', emoji: '🟢' },
-  blue: { label: '水', emoji: '🔵' },
-  red: { label: '火', emoji: '🔴' },
-  yellow: { label: '雷', emoji: '🟡' },
-  purple: { label: '毒', emoji: '🟣' },
-  pink: { label: '花', emoji: '🩷' },
-  all: { label: '全て', emoji: '🌈' },
+  green: { label: '\u8349\u539F', emoji: '\u{1F7E2}' },
+  blue: { label: '\u6C34', emoji: '\u{1F535}' },
+  red: { label: '\u706B', emoji: '\u{1F534}' },
+  yellow: { label: '\u96F7', emoji: '\u{1F7E1}' },
+  purple: { label: '\u6BD2', emoji: '\u{1F7E3}' },
+  pink: { label: '\u82B1', emoji: '\u{1FA77}' },
+  all: { label: '\u5168\u3066', emoji: '\u{1F308}' },
 };
 
 export default function EncyclopediaScreen() {
@@ -23,6 +23,7 @@ export default function EncyclopediaScreen() {
 
   const discoveredCount = encyclopedia.filter(e => e.discovered).length;
   const totalCount = encyclopedia.length;
+  const collectionRate = totalCount > 0 ? Math.round((discoveredCount / totalCount) * 100) : 0;
 
   const filteredEntries = filter === 'all'
     ? encyclopedia
@@ -31,7 +32,6 @@ export default function EncyclopediaScreen() {
         return master && master.colorFamily === filter;
       });
 
-  // Sort by tier
   const sortedEntries = [...filteredEntries].sort((a, b) => {
     const ma = SLIME_MASTER[a.masterId];
     const mb = SLIME_MASTER[b.masterId];
@@ -42,10 +42,35 @@ export default function EncyclopediaScreen() {
 
   const selectedMaster = selectedEntry ? SLIME_MASTER[selectedEntry.masterId] : null;
 
+  const handleShare = useCallback(async () => {
+    const message = `\u30B9\u30E9\u30A4\u30E0\u7267\u5834 \u{1F40C} \u30B3\u30EC\u30AF\u30B7\u30E7\u30F3\u7387 ${collectionRate}% (${discoveredCount}/${totalCount}\u7A2E) #\u30B9\u30E9\u30A4\u30E0\u7267\u5834`;
+    try {
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({ text: message });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(message);
+        }
+      } else {
+        await Share.share({ message });
+      }
+    } catch {
+      // User cancelled
+    }
+  }, [collectionRate, discoveredCount, totalCount]);
+
   return (
     <View style={styles.container}>
-      <View style={styles.countRow}>
-        <Text style={styles.count}>発見: {discoveredCount}/{totalCount}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.count}>\u767A\u898B: {discoveredCount}/{totalCount} ({collectionRate}%)</Text>
+        <Pressable style={styles.shareButton} onPress={handleShare}>
+          <Text style={styles.shareText}>{'\u{1F4E4}'} \u30B7\u30A7\u30A2</Text>
+        </Pressable>
+      </View>
+
+      {/* Progress bar */}
+      <View style={styles.progressContainer}>
+        <View style={[styles.progressBar, { width: `${collectionRate}%` }]} />
       </View>
 
       {/* Color filter tabs */}
@@ -54,7 +79,7 @@ export default function EncyclopediaScreen() {
           style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
           onPress={() => setFilter('all')}
         >
-          <Text style={styles.filterText}>🌈全て</Text>
+          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>{'\u{1F308}'}\u5168\u3066</Text>
         </Pressable>
         {COLOR_FAMILIES.map(cf => (
           <Pressable
@@ -62,7 +87,7 @@ export default function EncyclopediaScreen() {
             style={[styles.filterTab, filter === cf && styles.filterTabActive]}
             onPress={() => setFilter(cf)}
           >
-            <Text style={styles.filterText}>
+            <Text style={[styles.filterText, filter === cf && styles.filterTextActive]}>
               {COLOR_LABELS[cf]?.emoji} {COLOR_LABELS[cf]?.label}
             </Text>
           </Pressable>
@@ -99,21 +124,21 @@ export default function EncyclopediaScreen() {
               <Text style={[styles.modalRarity, { color: RARITY_COLORS[selectedMaster.rarity] }]}>
                 {'\u2605'.repeat(selectedMaster.tier)} {selectedMaster.rarity}
               </Text>
-              <Text style={styles.modalStat}>&#x1F4B0; {selectedMaster.coinsPerMinute} coin/min</Text>
+              <Text style={styles.modalStat}>{'\u{1F4B0}'} {selectedMaster.coinsPerMinute} coin/min</Text>
               {selectedMaster.ability !== 'none' && (
-                <Text style={styles.modalAbility}>&#x2728; {selectedMaster.ability}</Text>
+                <Text style={styles.modalAbility}>{'\u2728'} {selectedMaster.ability}</Text>
               )}
               <Text style={styles.modalDesc}>{selectedMaster.description}</Text>
-              <Text style={styles.modalMergeCount}>合成回数: {selectedEntry.mergeCount}</Text>
+              <Text style={styles.modalMergeCount}>\u5408\u6210\u56DE\u6570: {selectedEntry.mergeCount}</Text>
 
               {selectedEntry.discoveredAt && (
                 <Text style={styles.modalDate}>
-                  発見日: {new Date(selectedEntry.discoveredAt).toLocaleDateString('ja-JP')}
+                  \u767A\u898B\u65E5: {new Date(selectedEntry.discoveredAt).toLocaleDateString('ja-JP')}
                 </Text>
               )}
 
               <Pressable style={styles.modalClose} onPress={() => setSelectedEntry(null)}>
-                <Text style={styles.modalCloseText}>閉じる</Text>
+                <Text style={styles.modalCloseText}>\u9589\u3058\u308B</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -125,8 +150,40 @@ export default function EncyclopediaScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME_COLORS.background },
-  countRow: { padding: 12, alignItems: 'flex-end' },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
   count: { fontSize: 14, fontWeight: 'bold', color: THEME_COLORS.text },
+  shareButton: {
+    backgroundColor: THEME_COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  shareText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  progressContainer: {
+    height: 6,
+    backgroundColor: THEME_COLORS.progressBarBg,
+    borderRadius: 3,
+    marginHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: THEME_COLORS.progressBar,
+    borderRadius: 3,
+  },
   filterRow: { maxHeight: 44, paddingHorizontal: 8 },
   filterTab: {
     paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 4,
@@ -137,7 +194,8 @@ const styles = StyleSheet.create({
     backgroundColor: THEME_COLORS.primary,
     borderColor: THEME_COLORS.primary,
   },
-  filterText: { fontSize: 12, fontWeight: '600' },
+  filterText: { fontSize: 12, fontWeight: '600', color: THEME_COLORS.text },
+  filterTextActive: { color: '#FFF' },
   grid: { flex: 1, marginTop: 8 },
   gridContent: { paddingHorizontal: 8, paddingBottom: 20 },
   gridRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },

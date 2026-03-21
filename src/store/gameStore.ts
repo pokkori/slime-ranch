@@ -264,7 +264,12 @@ export const useGameStore = create<GameState>()(
             );
             filtered.push(ns);
             // Discover
-            get().discoverSlime(masterId);
+            const enc2 = [...get().encyclopedia];
+            const idx2 = enc2.findIndex(e => e.masterId === masterId);
+            if (idx2 >= 0 && !enc2[idx2].discovered) {
+              enc2[idx2] = { ...enc2[idx2], discovered: true, discoveredAt: Date.now(), mergeCount: enc2[idx2].mergeCount + 1 };
+              set({ encyclopedia: enc2 });
+            }
           }
           const stats = { ...get().statistics, totalMerges: get().statistics.totalMerges + 1 };
           set({ slimes: filtered, statistics: stats });

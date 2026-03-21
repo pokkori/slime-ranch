@@ -1,5 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import { useGameStore } from '../store/gameStore';
 import { formatNumber, formatTime } from '../utils/format';
 import { THEME_COLORS } from '../constants/colors';
@@ -14,26 +22,37 @@ export const OfflineRewardModal: React.FC = () => {
     <Modal visible={true} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card}>
-          <Text style={styles.emoji}>&#x1F319;</Text>
-          <Text style={styles.title}>おかえりなさい！</Text>
-          <Text style={styles.subtitle}>留守の間にスライムたちが{'\n'}頑張ってくれました！</Text>
+          <Text style={styles.emoji}>{'\u{1F319}'}</Text>
+          <Text style={styles.title}>{'\u304A\u304B\u3048\u308A\u306A\u3055\u3044\uFF01'}</Text>
+          <Text style={styles.subtitle}>{'\u7559\u5B88\u306E\u9593\u306B\u30B9\u30E9\u30A4\u30E0\u305F\u3061\u304C'}{'\n'}{'\u9811\u5F35\u3063\u3066\u304F\u308C\u307E\u3057\u305F\uFF01'}</Text>
 
           <View style={styles.timeRow}>
-            <Text style={styles.timeLabel}>&#x23F1; 離れていた時間:</Text>
+            <Text style={styles.timeLabel}>{'\u23F1'} {'\u96E2\u308C\u3066\u3044\u305F\u6642\u9593'}:</Text>
             <Text style={styles.timeValue}>{formatTime(reward.elapsedSeconds)}</Text>
           </View>
 
           <View style={styles.coinRow}>
-            <Text style={styles.coinLabel}>&#x1F4B0; 獲得コイン:</Text>
+            <Text style={styles.coinLabel}>{'\u{1F4B0}'} {'\u7372\u5F97\u30B3\u30A4\u30F3'}:</Text>
             <Text style={styles.coinValue}>{formatNumber(reward.coins)}</Text>
           </View>
 
-          <Pressable style={styles.doubleButton} onPress={() => dismiss(true)}>
-            <Text style={styles.doubleText}>&#x1F4E2; 広告を見て2倍 → {formatNumber(reward.coins * 2)}</Text>
-          </Pressable>
+          {/* Prominent ad button with glow effect */}
+          <View style={styles.doubleButtonContainer}>
+            <View style={styles.doubleGlow} />
+            <Pressable style={styles.doubleButton} onPress={() => dismiss(true)}>
+              <Text style={styles.doubleEmoji}>{'\u{1F3AC}'}</Text>
+              <View style={styles.doubleTextContainer}>
+                <Text style={styles.doubleTitle}>{'\u5E83\u544A\u3092\u898B\u30662\u500D\uFF01'}</Text>
+                <Text style={styles.doubleAmount}>{formatNumber(reward.coins * 2)} {'\u30B3\u30A4\u30F3'}</Text>
+              </View>
+            </Pressable>
+            <View style={styles.doubleBadge}>
+              <Text style={styles.doubleBadgeText}>x2</Text>
+            </View>
+          </View>
 
           <Pressable style={styles.normalButton} onPress={() => dismiss(false)}>
-            <Text style={styles.normalText}>受け取る</Text>
+            <Text style={styles.normalText}>{formatNumber(reward.coins)} {'\u30B3\u30A4\u30F3\u3092\u53D7\u3051\u53D6\u308B'}</Text>
           </Pressable>
         </View>
       </View>
@@ -106,19 +125,63 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: THEME_COLORS.coin,
   },
-  doubleButton: {
-    backgroundColor: THEME_COLORS.accent,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
+  doubleButtonContainer: {
+    position: 'relative',
     width: '100%',
-    alignItems: 'center',
+    marginTop: 20,
   },
-  doubleText: {
+  doubleGlow: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 28,
+    backgroundColor: '#FFD700',
+    opacity: 0.3,
+  },
+  doubleButton: {
+    backgroundColor: '#FF9800',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 24,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+  },
+  doubleEmoji: {
+    fontSize: 24,
+  },
+  doubleTextContainer: {
+    alignItems: 'flex-start',
+  },
+  doubleTitle: {
     color: '#FFF',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 15,
+  },
+  doubleAmount: {
+    color: '#FFF9C4',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  doubleBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -4,
+    backgroundColor: '#F44336',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  doubleBadgeText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
   normalButton: {
     paddingHorizontal: 20,
@@ -128,5 +191,6 @@ const styles = StyleSheet.create({
   normalText: {
     color: THEME_COLORS.textSecondary,
     fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });

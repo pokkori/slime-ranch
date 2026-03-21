@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useCallback, useRef } from 'react';
+import { View, StyleSheet, PanResponder, GestureResponderEvent, PanResponderGestureState } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,7 +9,6 @@ import Animated, {
   withSequence,
   Easing,
   interpolate,
-  runOnJS,
 } from 'react-native-reanimated';
 import { SlimeInstance } from '../types/slime';
 import { SLIME_MASTER } from '../constants/slimes';
@@ -18,17 +17,29 @@ interface SlimeBlobProps {
   slime: SlimeInstance;
   onTap: (instanceId: string) => void;
   onLongPress?: (instanceId: string) => void;
+  onDragStart?: (instanceId: string) => void;
+  onDragMove?: (instanceId: string, x: number, y: number) => void;
+  onDragEnd?: (instanceId: string, x: number, y: number) => void;
 }
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-export const SlimeBlob: React.FC<SlimeBlobProps> = React.memo(({ slime, onTap, onLongPress }) => {
+export const SlimeBlob: React.FC<SlimeBlobProps> = React.memo(({
+  slime,
+  onTap,
+  onLongPress,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}) => {
   const master = SLIME_MASTER[slime.masterId];
   if (!master) return null;
 
   const scale = useSharedValue(slime.isNew ? 0.3 : 1);
   const wobble = useSharedValue(0);
   const radius = master.baseRadius;
+
+  const isDraggingRef = useRef(false);
+  const dragOffsetXRef = useRef(0);
+  const dragOffsetYRef = useRef(0);
 
   useEffect(() => {
     if (slime.isNew) {
@@ -44,20 +55,58 @@ export const SlimeBlob: React.FC<SlimeBlobProps> = React.memo(({ slime, onTap, o
     );
   }, []);
 
-  const handleTap = () => {
-    scale.value = withSequence(
-      withTiming(1.2, { duration: 80 }),
-      withSpring(1, { damping: 10, stiffness: 300, mass: 0.8 }),
-    );
-    onTap(slime.instanceId);
-  };
-
-  const handleLongPress = () => {
-    if (onLongPress) onLongPress(slime.instanceId);
-  };
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => {
+        return Math.abs(gs.dx) > 5 || Math.abs(gs.dy) > 5;
+      },
+      onPanResponderGrant: () => {
+        isDraggingRef.current = false;
+        dragOffsetXRef.current = 0;
+        dragOffsetYRef.current = 0;
+      },
+      onPanResponderMove: (_, gs) => {
+        const totalMove = Math.abs(gs.dx) + Math.abs(gs.dy);
+        if (!isDraggingRef.current && totalMove > 8) {
+          isDraggingRef.current = true;
+          scale.value = withSpring(1.3, { damping: 12, stiffness: 200 });
+          if (onDragStart) onDragStart(slime.instanceId);
+        }
+        if (isDraggingRef.current) {
+          dragOffsetXRef.current = gs.dx;
+          dragOffsetYRef.current = gs.dy;
+          if (onDragMove) {
+            onDragMove(slime.instanceId, slime.x + gs.dx, slime.y + gs.dy);
+          }
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (isDraggingRef.current) {
+          if (onDragEnd) {
+            onDragEnd(slime.instanceId, slime.x + gs.dx, slime.y + gs.dy);
+          }
+          scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+        } else {
+          // It was a tap
+          scale.value = withSequence(
+            withTiming(1.2, { duration: 80 }),
+            withSpring(1, { damping: 10, stiffness: 300, mass: 0.8 }),
+          );
+          onTap(slime.instanceId);
+        }
+        isDraggingRef.current = false;
+        dragOffsetXRef.current = 0;
+        dragOffsetYRef.current = 0;
+      },
+      onPanResponderTerminate: () => {
+        isDraggingRef.current = false;
+        scale.value = withSpring(1);
+      },
+    })
+  ).current;
 
   const animatedStyle = useAnimatedStyle(() => {
-    const wobbleScale = interpolate(wobble.value, [0, 1], [0.96, 1.04]);
     const wobbleX = interpolate(wobble.value, [0, 1], [1.02, 0.98]);
     const wobbleY = interpolate(wobble.value, [0, 1], [0.98, 1.02]);
 
@@ -71,14 +120,13 @@ export const SlimeBlob: React.FC<SlimeBlobProps> = React.memo(({ slime, onTap, o
     };
   });
 
-  // Rarity glow
+  // Glow for rarity
   const glowColor = master.tier >= 5 ? '#FFD700' : master.tier >= 3 ? '#64B5F6' : 'transparent';
   const showGlow = master.tier >= 3;
 
   return (
-    <AnimatedPressable
-      onPress={handleTap}
-      onLongPress={handleLongPress}
+    <Animated.View
+      {...panResponder.panHandlers}
       style={[styles.container, { width: radius * 2, height: radius * 2 }, animatedStyle]}
     >
       {/* Shadow */}
@@ -109,7 +157,7 @@ export const SlimeBlob: React.FC<SlimeBlobProps> = React.memo(({ slime, onTap, o
         borderRadius: radius,
         backgroundColor: master.baseColor,
       }]}>
-        {/* Gradient overlay */}
+        {/* Highlight */}
         <View style={[styles.highlight, {
           width: radius * 1.2,
           height: radius * 1.2,
@@ -155,7 +203,7 @@ export const SlimeBlob: React.FC<SlimeBlobProps> = React.memo(({ slime, onTap, o
           borderBottomRightRadius: radius * 0.15,
         }]} />
 
-        {/* Cheeks for cute slimes */}
+        {/* Cheeks */}
         <View style={[styles.cheek, {
           width: radius * 0.2,
           height: radius * 0.12,
@@ -171,7 +219,7 @@ export const SlimeBlob: React.FC<SlimeBlobProps> = React.memo(({ slime, onTap, o
           top: radius * 1.1,
         }]} />
       </View>
-    </AnimatedPressable>
+    </Animated.View>
   );
 });
 

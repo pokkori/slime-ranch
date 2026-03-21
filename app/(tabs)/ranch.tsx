@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, StyleSheet, Dimensions, Text, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../../src/store/gameStore';
 import { SLIME_MASTER } from '../../src/constants/slimes';
 import { BACKGROUND_COLORS, THEME_COLORS } from '../../src/constants/colors';
@@ -10,6 +11,7 @@ import { MergeEffect } from '../../src/rendering/MergeEffect';
 import { CoinDisplay } from '../../src/components/CoinDisplay';
 import { SlimeInfo } from '../../src/components/SlimeInfo';
 import { OfflineRewardModal } from '../../src/components/OfflineRewardModal';
+import { TutorialOverlay } from '../../src/components/TutorialOverlay';
 import { canMerge } from '../../src/engine/merge-logic';
 import { SlimeInstance } from '../../src/types/slime';
 import { formatNumber } from '../../src/utils/format';
@@ -18,6 +20,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GROUND_Y = SCREEN_HEIGHT - 180;
 const WALL_LEFT = 10;
 const WALL_RIGHT = SCREEN_WIDTH - 10;
+const MERGE_DISTANCE = 60; // distance threshold for drag-merge
 
 export default function RanchScreen() {
   const slimes = useGameStore(s => s.slimes);
@@ -32,21 +35,116 @@ export default function RanchScreen() {
   const updateSlimePositions = useGameStore(s => s.updateSlimePositions);
   const coins = useGameStore(s => s.coins);
   const gems = useGameStore(s => s.gems);
+  const settings = useGameStore(s => s.settings);
 
   const [selectedSlime, setSelectedSlime] = useState<SlimeInstance | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<string | null>(null);
   const animationRef = useRef<number | null>(null);
   const lastTickRef = useRef(Date.now());
   const coinTickRef = useRef(Date.now());
+  const draggedSlimeRef = useRef<string | null>(null);
 
   // Simple physics simulation
   const slimePhysicsRef = useRef<Map<string, { vx: number; vy: number }>>(new Map());
 
   const bgColors = BACKGROUND_COLORS[ranch.backgroundTheme] || BACKGROUND_COLORS.meadow;
 
+  // Haptic feedback helper
+  const triggerHaptic = useCallback((type: 'light' | 'success') => {
+    if (!settings.hapticsEnabled) return;
+    if (Platform.OS === 'web') return;
+    try {
+      if (type === 'light') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      // Haptics not available
+    }
+  }, [settings.hapticsEnabled]);
+
+  // Drag handlers
+  const handleDragStart = useCallback((instanceId: string) => {
+    draggedSlimeRef.current = instanceId;
+    // Pause physics for dragged slime
+    const physics = slimePhysicsRef.current.get(instanceId);
+    if (physics) {
+      physics.vx = 0;
+      physics.vy = 0;
+    }
+  }, []);
+
+  const handleDragMove = useCallback((instanceId: string, x: number, y: number) => {
+    // Find nearest merge-compatible slime
+    const currentSlimes = useGameStore.getState().slimes;
+    const dragged = currentSlimes.find(s => s.instanceId === instanceId);
+    if (!dragged) return;
+
+    let bestId: string | null = null;
+    let bestDist = MERGE_DISTANCE;
+
+    for (const other of currentSlimes) {
+      if (other.instanceId === instanceId || other.isMerging) continue;
+      if (!canMerge(dragged, other)) continue;
+
+      const dx = other.x - x;
+      const dy = other.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestId = other.instanceId;
+      }
+    }
+
+    setMergeTarget(bestId);
+  }, []);
+
+  const handleDragEnd = useCallback((instanceId: string, x: number, y: number) => {
+    draggedSlimeRef.current = null;
+
+    const currentSlimes = useGameStore.getState().slimes;
+    const dragged = currentSlimes.find(s => s.instanceId === instanceId);
+    if (!dragged) {
+      setMergeTarget(null);
+      return;
+    }
+
+    // Find merge target
+    let bestId: string | null = null;
+    let bestDist = MERGE_DISTANCE;
+
+    for (const other of currentSlimes) {
+      if (other.instanceId === instanceId || other.isMerging) continue;
+      if (!canMerge(dragged, other)) continue;
+
+      const dx = other.x - x;
+      const dy = other.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestId = other.instanceId;
+      }
+    }
+
+    if (bestId) {
+      const target = currentSlimes.find(s => s.instanceId === bestId);
+      const masterTarget = target ? SLIME_MASTER[target.masterId] : null;
+      const isRare = masterTarget ? masterTarget.tier >= 2 : false;
+
+      const merged = tryMerge(instanceId, bestId);
+      if (merged) {
+        triggerHaptic(isRare ? 'success' : 'light');
+      }
+    }
+
+    setMergeTarget(null);
+  }, [tryMerge, triggerHaptic]);
+
   // Physics update loop
   const updatePhysics = useCallback(() => {
     const now = Date.now();
-    const dt = Math.min((now - lastTickRef.current) / 1000, 0.05); // cap at 50ms
+    const dt = Math.min((now - lastTickRef.current) / 1000, 0.05);
     lastTickRef.current = now;
 
     const currentSlimes = useGameStore.getState().slimes;
@@ -78,6 +176,8 @@ export default function RanchScreen() {
     // Update each slime
     for (const slime of currentSlimes) {
       if (slime.isMerging) continue;
+      // Skip physics for dragged slime
+      if (draggedSlimeRef.current === slime.instanceId) continue;
 
       const master = SLIME_MASTER[slime.masterId];
       if (!master) continue;
@@ -85,23 +185,16 @@ export default function RanchScreen() {
       const p = physics.get(slime.instanceId)!;
       const radius = master.baseRadius;
 
-      // Gravity
-      p.vy += 400 * dt; // gravity
-
-      // Air friction
+      p.vy += 400 * dt;
       p.vx *= 0.99;
       p.vy *= 0.99;
-
-      // Random wandering force
       p.vx += (Math.random() - 0.5) * 20 * dt;
 
-      // Speed boost for speedy ability
       const speedMul = master.ability === 'speedy' ? 2 : 1;
 
       let newX = slime.x + p.vx * dt * speedMul;
       let newY = slime.y + p.vy * dt * speedMul;
 
-      // Wall collisions
       if (newX - radius < WALL_LEFT) {
         newX = WALL_LEFT + radius;
         p.vx = Math.abs(p.vx) * 0.6;
@@ -110,18 +203,13 @@ export default function RanchScreen() {
         newX = WALL_RIGHT - radius;
         p.vx = -Math.abs(p.vx) * 0.6;
       }
-
-      // Ground collision
       if (newY + radius > GROUND_Y) {
         newY = GROUND_Y - radius;
         p.vy = -Math.abs(p.vy) * 0.5;
-        // Small random hop
         if (Math.abs(p.vy) < 10) {
           p.vy = -Math.random() * 30 - 10;
         }
       }
-
-      // Ceiling
       if (newY - radius < 80) {
         newY = 80 + radius;
         p.vy = Math.abs(p.vy) * 0.3;
@@ -130,12 +218,14 @@ export default function RanchScreen() {
       updates.push({ id: slime.instanceId, x: newX, y: newY });
     }
 
-    // Slime-slime collisions and merge checks
+    // Slime-slime collisions (no auto-merge, collisions only)
     for (let i = 0; i < currentSlimes.length; i++) {
       for (let j = i + 1; j < currentSlimes.length; j++) {
         const a = currentSlimes[i];
         const b = currentSlimes[j];
         if (a.isMerging || b.isMerging) continue;
+        // Skip collision for dragged slime
+        if (draggedSlimeRef.current === a.instanceId || draggedSlimeRef.current === b.instanceId) continue;
 
         const masterA = SLIME_MASTER[a.masterId];
         const masterB = SLIME_MASTER[b.masterId];
@@ -154,7 +244,6 @@ export default function RanchScreen() {
         const minDist = masterA.baseRadius + masterB.baseRadius;
 
         if (dist < minDist && dist > 0) {
-          // Collision response
           const overlap = minDist - dist;
           const nx = dx / dist;
           const ny = dy / dist;
@@ -184,13 +273,6 @@ export default function RanchScreen() {
               pb.vy -= dot * ny * bounce;
             }
           }
-
-          // Try merge
-          if (canMerge(a, b)) {
-            const store = useGameStore.getState();
-            store.tryMerge(a.instanceId, b.instanceId);
-            break;
-          }
         }
       }
     }
@@ -217,7 +299,8 @@ export default function RanchScreen() {
 
   const handleTap = useCallback((instanceId: string) => {
     tapSlime(instanceId);
-  }, [tapSlime]);
+    triggerHaptic('light');
+  }, [tapSlime, triggerHaptic]);
 
   const handleLongPress = useCallback((instanceId: string) => {
     const slime = useGameStore.getState().slimes.find(s => s.instanceId === instanceId);
@@ -226,76 +309,99 @@ export default function RanchScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bgColors.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>スライム牧場</Text>
-        <CoinDisplay />
-      </View>
-
-      {/* Ranch canvas */}
-      <View style={[styles.canvas, { backgroundColor: bgColors.bottom }]}>
-        {/* Ground */}
-        <View style={[styles.ground, { backgroundColor: bgColors.ground, top: GROUND_Y - 80 }]}>
-          <View style={styles.grassRow}>
-            {['🌿','🌸','🍄','⛲','🌿','🌸','🍄','🌿'].map((emoji, i) => (
-              <Text key={i} style={styles.grassEmoji}>{emoji}</Text>
-            ))}
-          </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>スライム牧場</Text>
+          <CoinDisplay />
         </View>
 
-        {/* Slimes */}
-        {slimes.map(slime => (
-          <SlimeBlob
-            key={slime.instanceId}
-            slime={slime}
-            onTap={handleTap}
-            onLongPress={handleLongPress}
-          />
-        ))}
+        {/* Ranch canvas */}
+        <View style={[styles.canvas, { backgroundColor: bgColors.bottom }]}>
+          {/* Ground */}
+          <View style={[styles.ground, { backgroundColor: bgColors.ground, top: GROUND_Y - 80 }]}>
+            <View style={styles.grassRow}>
+              {['\u{1F33F}','\u{1F338}','\u{1F344}','\u26F2','\u{1F33F}','\u{1F338}','\u{1F344}','\u{1F33F}'].map((emoji, i) => (
+                <Text key={i} style={styles.grassEmoji}>{emoji}</Text>
+              ))}
+            </View>
+          </View>
 
-        {/* Floating coins */}
-        {floatingCoins.map(coin => (
-          <CoinFloat
-            key={coin.id}
-            x={coin.x}
-            y={coin.y}
-            value={coin.value}
-            onComplete={() => clearFloatingCoin(coin.id)}
-          />
-        ))}
+          {/* Merge target highlight */}
+          {mergeTarget && (() => {
+            const target = slimes.find(s => s.instanceId === mergeTarget);
+            if (!target) return null;
+            const master = SLIME_MASTER[target.masterId];
+            if (!master) return null;
+            return (
+              <View style={[styles.mergeHighlight, {
+                left: target.x - master.baseRadius - 8,
+                top: target.y - master.baseRadius - 8,
+                width: (master.baseRadius + 8) * 2,
+                height: (master.baseRadius + 8) * 2,
+                borderRadius: master.baseRadius + 8,
+              }]} />
+            );
+          })()}
 
-        {/* Merge effect */}
-        {mergeAnimation && (
-          <MergeEffect
-            resultMasterId={mergeAnimation.resultMasterId}
-            midX={mergeAnimation.midX}
-            midY={mergeAnimation.midY}
-            isRare={mergeAnimation.isRare}
-            onComplete={completeMergeAnimation}
-          />
-        )}
-      </View>
+          {/* Slimes */}
+          {slimes.map(slime => (
+            <SlimeBlob
+              key={slime.instanceId}
+              slime={slime}
+              onTap={handleTap}
+              onLongPress={handleLongPress}
+              onDragStart={handleDragStart}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd}
+            />
+          ))}
 
-      {/* Status bar */}
-      <View style={styles.statusBar}>
-        <Text style={styles.statusText}>
-          &#x1F7E2; {slimes.length}/{ranch.maxSlimes}
-        </Text>
-        <Text style={styles.statusText}>
-          &#x1F4B0; {formatNumber(coins)}
-        </Text>
-      </View>
+          {/* Floating coins */}
+          {floatingCoins.map(coin => (
+            <CoinFloat
+              key={coin.id}
+              x={coin.x}
+              y={coin.y}
+              value={coin.value}
+              onComplete={() => clearFloatingCoin(coin.id)}
+            />
+          ))}
 
-      {/* Offline reward modal */}
-      <OfflineRewardModal />
+          {/* Merge effect */}
+          {mergeAnimation && (
+            <MergeEffect
+              resultMasterId={mergeAnimation.resultMasterId}
+              midX={mergeAnimation.midX}
+              midY={mergeAnimation.midY}
+              isRare={mergeAnimation.isRare}
+              onComplete={completeMergeAnimation}
+            />
+          )}
+        </View>
 
-      {/* Slime info popup */}
-      <SlimeInfo
-        slime={selectedSlime}
-        visible={!!selectedSlime}
-        onClose={() => setSelectedSlime(null)}
-      />
-    </SafeAreaView>
+        {/* Status bar */}
+        <View style={styles.statusBar}>
+          <Text style={styles.statusText}>
+            {'\u{1F7E2}'} {slimes.length}/{ranch.maxSlimes}
+          </Text>
+          <Text style={styles.statusText}>
+            {'\u{1F4B0}'} {formatNumber(coins)}
+          </Text>
+        </View>
+
+        {/* Tutorial overlay */}
+        <TutorialOverlay />
+
+        {/* Offline reward modal */}
+        <OfflineRewardModal />
+
+        {/* Slime info popup */}
+        <SlimeInfo
+          slime={selectedSlime}
+          visible={!!selectedSlime}
+          onClose={() => setSelectedSlime(null)}
+        />
+      </SafeAreaView>
   );
 }
 
@@ -349,5 +455,12 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     color: THEME_COLORS.textSecondary,
+  },
+  mergeHighlight: {
+    position: 'absolute',
+    borderWidth: 3,
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255,215,0,0.15)',
+    zIndex: 0,
   },
 });
