@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, StyleSheet, Dimensions, Text, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
+  withSpring,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../../src/store/gameStore';
 import { SLIME_MASTER } from '../../src/constants/slimes';
@@ -49,7 +56,68 @@ export default function RanchScreen() {
 
   const bgColors = BACKGROUND_COLORS[ranch.backgroundTheme] || BACKGROUND_COLORS.meadow;
 
-  // Haptic feedback helper
+  // Screen shake shared value for Tier 4+ merges
+  const shakeX = useSharedValue(0);
+  const shakeY = useSharedValue(0);
+
+  const canvasShakeStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: shakeX.value },
+      { translateY: shakeY.value },
+    ],
+  }));
+
+  const triggerScreenShake = useCallback(() => {
+    shakeX.value = withSequence(
+      withTiming(6, { duration: 30 }),
+      withTiming(-5, { duration: 30 }),
+      withTiming(4, { duration: 30 }),
+      withTiming(-3, { duration: 30 }),
+      withTiming(2, { duration: 30 }),
+      withTiming(0, { duration: 30 }),
+    );
+    shakeY.value = withSequence(
+      withTiming(-4, { duration: 30 }),
+      withTiming(3, { duration: 30 }),
+      withTiming(-2, { duration: 30 }),
+      withTiming(1, { duration: 30 }),
+      withTiming(0, { duration: 40 }),
+    );
+  }, []);
+
+  // Tier-aware haptic feedback
+  const triggerMergeHaptic = useCallback((resultTier: number) => {
+    if (!settings.hapticsEnabled) return;
+    if (Platform.OS === 'web') return;
+    try {
+      if (resultTier >= 6) {
+        // Legend: Heavy x2 + Success notification
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        setTimeout(() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }, 100);
+        setTimeout(() => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }, 200);
+      } else if (resultTier >= 5) {
+        // Elder: Heavy + Success notification
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        setTimeout(() => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }, 100);
+      } else if (resultTier >= 3) {
+        // Teen+: Medium
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } else {
+        // Normal: Light
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } catch {
+      // Haptics not available
+    }
+  }, [settings.hapticsEnabled]);
+
+  // Simple haptic for taps / splits
   const triggerHaptic = useCallback((type: 'light' | 'success') => {
     if (!settings.hapticsEnabled) return;
     if (Platform.OS === 'web') return;
@@ -130,16 +198,21 @@ export default function RanchScreen() {
     if (bestId) {
       const target = currentSlimes.find(s => s.instanceId === bestId);
       const masterTarget = target ? SLIME_MASTER[target.masterId] : null;
-      const isRare = masterTarget ? masterTarget.tier >= 2 : false;
+      // The result tier is one above the current tier
+      const resultTier = masterTarget ? Math.min(masterTarget.tier + 1, 6) : 1;
 
       const merged = tryMerge(instanceId, bestId);
       if (merged) {
-        triggerHaptic(isRare ? 'success' : 'light');
+        triggerMergeHaptic(resultTier);
+        // Screen shake for Tier 4+ results
+        if (resultTier >= 4) {
+          triggerScreenShake();
+        }
       }
     }
 
     setMergeTarget(null);
-  }, [tryMerge, triggerHaptic]);
+  }, [tryMerge, triggerMergeHaptic, triggerScreenShake]);
 
   // Physics update loop
   const updatePhysics = useCallback(() => {
@@ -315,8 +388,8 @@ export default function RanchScreen() {
           <CoinDisplay />
         </View>
 
-        {/* Ranch canvas */}
-        <View style={[styles.canvas, { backgroundColor: bgColors.bottom }]}>
+        {/* Ranch canvas with screen shake support */}
+        <Animated.View style={[styles.canvas, { backgroundColor: bgColors.bottom }, canvasShakeStyle]}>
           {/* Ground */}
           <View style={[styles.ground, { backgroundColor: bgColors.ground, top: GROUND_Y - 80 }]}>
             <View style={styles.grassRow}>
@@ -377,7 +450,7 @@ export default function RanchScreen() {
               onComplete={completeMergeAnimation}
             />
           )}
-        </View>
+        </Animated.View>
 
         {/* Status bar */}
         <View style={styles.statusBar}>

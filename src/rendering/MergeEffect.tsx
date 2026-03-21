@@ -15,7 +15,6 @@ import { RARITY_COLORS } from '../constants/colors';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const PARTICLE_COUNT = 12;
 const RAINBOW_COLORS = ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#9B59B6', '#FF6B9D'];
 
 interface Particle {
@@ -26,16 +25,23 @@ interface Particle {
   delay: number;
 }
 
-function generateParticles(baseColor: string, isRare: boolean): Particle[] {
-  const count = isRare ? PARTICLE_COUNT : 8;
+function getParticleCount(tier: number): number {
+  if (tier <= 2) return 6;
+  if (tier <= 4) return 10;
+  return 16;
+}
+
+function generateParticles(baseColor: string, tier: number): Particle[] {
+  const count = getParticleCount(tier);
+  const isHighTier = tier >= 3;
   const particles: Particle[] = [];
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
     particles.push({
       angle,
-      distance: 40 + Math.random() * (isRare ? 80 : 40),
-      size: 6 + Math.random() * (isRare ? 10 : 6),
-      color: isRare ? RAINBOW_COLORS[i % RAINBOW_COLORS.length] : baseColor,
+      distance: 40 + Math.random() * (isHighTier ? 80 : 40),
+      size: 6 + Math.random() * (isHighTier ? 10 : 6),
+      color: tier >= 5 ? RAINBOW_COLORS[i % RAINBOW_COLORS.length] : baseColor,
       delay: Math.random() * 100,
     });
   }
@@ -82,6 +88,62 @@ const ParticleDot: React.FC<ParticleDotProps> = ({ particle, centerX, centerY })
   return <Animated.View style={style} />;
 };
 
+/** Inline "EVOLUTION!" text for Tier 5-6 merges */
+const EvolutionText: React.FC<{ centerX: number; centerY: number }> = ({ centerX, centerY }) => {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const textScale = useSharedValue(0.5);
+
+  useEffect(() => {
+    opacity.value = withDelay(100, withSequence(
+      withTiming(1, { duration: 200 }),
+      withDelay(600, withTiming(0, { duration: 300 })),
+    ));
+    translateY.value = withDelay(100,
+      withTiming(-40, { duration: 800, easing: Easing.out(Easing.quad) }),
+    );
+    textScale.value = withDelay(100, withSequence(
+      withTiming(1.3, { duration: 200 }),
+      withSpring(1, { damping: 10, stiffness: 200 }),
+    ));
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    position: 'absolute' as const,
+    left: centerX - 60,
+    top: centerY - 60 + translateY.value,
+    opacity: opacity.value,
+    transform: [{ scale: textScale.value }],
+  }));
+
+  return (
+    <Animated.View style={style}>
+      <Text style={evoStyles.text}>EVOLUTION!</Text>
+    </Animated.View>
+  );
+};
+
+/** Screen flash overlay for Tier 5-6 inline merges */
+const InlineFlash: React.FC<{ color: string }> = ({ color }) => {
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withSequence(
+      withTiming(0.35, { duration: 100 }),
+      withTiming(0, { duration: 300 }),
+    );
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: color,
+    opacity: opacity.value,
+    zIndex: 49,
+  }));
+
+  return <Animated.View style={style} pointerEvents="none" />;
+};
+
 interface MergeEffectProps {
   resultMasterId: string;
   midX: number;
@@ -103,7 +165,8 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
     return null;
   }
 
-  const particles = useMemo(() => generateParticles(master.baseColor, isRare), [master.baseColor, isRare]);
+  const tier = master.tier;
+  const particles = useMemo(() => generateParticles(master.baseColor, tier), [master.baseColor, tier]);
 
   const flashOpacity = useSharedValue(0);
   const slimeScale = useSharedValue(0);
@@ -143,12 +206,23 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
         false,
       );
     } else {
-      slimeScale.value = withSequence(
-        withTiming(1.4, { duration: 200 }),
-        withTiming(0.85, { duration: 150 }),
-        withSpring(1, { damping: 12, stiffness: 180 }),
-      );
-      setTimeout(onComplete, 600);
+      // Tier-based inline animation
+      if (tier >= 3) {
+        // Scale bounce for Tier 3-4
+        slimeScale.value = withSequence(
+          withTiming(1.6, { duration: 200, easing: Easing.out(Easing.quad) }),
+          withTiming(0.8, { duration: 150 }),
+          withTiming(1.15, { duration: 100 }),
+          withSpring(1, { damping: 10, stiffness: 200 }),
+        );
+      } else {
+        slimeScale.value = withSequence(
+          withTiming(1.4, { duration: 200 }),
+          withTiming(0.85, { duration: 150 }),
+          withSpring(1, { damping: 12, stiffness: 180 }),
+        );
+      }
+      setTimeout(onComplete, tier >= 5 ? 1000 : 600);
     }
   }, []);
 
@@ -178,27 +252,39 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
   }));
 
   if (!isRare) {
-    // Inline merge with particles
+    // Inline merge with particles + tier-based enhancements
+    const showFlash = tier >= 5;
+    const showEvolution = tier >= 5;
+
     return (
-      <View style={styles.particleLayer} pointerEvents="none">
-        {particles.map((p, i) => (
-          <ParticleDot key={i} particle={p} centerX={midX} centerY={midY} />
-        ))}
-        <Animated.View style={[styles.inlineContainer, { left: midX - 30, top: midY - 30 }, slimeStyle]}>
-          <View style={[styles.inlineSlime, {
-            width: master.baseRadius * 2,
-            height: master.baseRadius * 2,
-            borderRadius: master.baseRadius,
-            backgroundColor: master.baseColor,
-          }]} />
-        </Animated.View>
-      </View>
+      <>
+        {/* Screen flash for Tier 5-6 */}
+        {showFlash && <InlineFlash color={master.baseColor} />}
+
+        <View style={styles.particleLayer} pointerEvents="none">
+          {particles.map((p, i) => (
+            <ParticleDot key={i} particle={p} centerX={midX} centerY={midY} />
+          ))}
+
+          {/* EVOLUTION! text for Tier 5-6 */}
+          {showEvolution && <EvolutionText centerX={midX} centerY={midY} />}
+
+          <Animated.View style={[styles.inlineContainer, { left: midX - 30, top: midY - 30 }, slimeStyle]}>
+            <View style={[styles.inlineSlime, {
+              width: master.baseRadius * 2,
+              height: master.baseRadius * 2,
+              borderRadius: master.baseRadius,
+              backgroundColor: master.baseColor,
+            }]} />
+          </Animated.View>
+        </View>
+      </>
     );
   }
 
   // Full-screen rare merge with rainbow ring + particles
   const rarityColor = RARITY_COLORS[master.rarity] || '#FFF';
-  const stars = '\u2605'.repeat(master.tier);
+  const stars = '\u2605'.repeat(tier);
 
   return (
     <Pressable style={styles.fullScreen} onPress={onComplete}>
@@ -260,6 +346,19 @@ export const MergeEffect: React.FC<MergeEffectProps> = ({
     </Pressable>
   );
 };
+
+const evoStyles = StyleSheet.create({
+  text: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+    width: 120,
+  },
+});
 
 const styles = StyleSheet.create({
   fullScreen: {
