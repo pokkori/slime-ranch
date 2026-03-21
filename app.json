@@ -29,7 +29,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "title": "スライム牧場 - 放置マージゲーム 全36種スライムを集めよう",
+      "description": "スライムを合体させて進化！自動でコインを稼ぐ放置型マージゲーム。",
+      "themeColor": "#2d7a3a"
     },
     "plugins": [
       "expo-router",

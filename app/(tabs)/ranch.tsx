@@ -83,6 +83,10 @@ export default function RanchScreen() {
     };
   }, [settings.bgmEnabled, ranch.backgroundTheme]);
 
+  const allMissionBonusClaimed = useGameStore(s => s.allMissionBonusClaimed);
+  const [showMissionComplete, setShowMissionComplete] = useState(false);
+  const prevAllClaimedRef = useRef(false);
+
   const [selectedSlime, setSelectedSlime] = useState<SlimeInstance | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
   const [comboDisplay, setComboDisplay] = useState<{ level: number; visible: boolean }>({ level: 0, visible: false });
@@ -97,6 +101,16 @@ export default function RanchScreen() {
   const slimePhysicsRef = useRef<Map<string, { vx: number; vy: number }>>(new Map());
 
   const bgColors = BACKGROUND_COLORS[ranch.backgroundTheme] || BACKGROUND_COLORS.meadow;
+
+  // 全ミッション達成フルスクリーン演出 (R7)
+  useEffect(() => {
+    if (allMissionBonusClaimed && !prevAllClaimedRef.current) {
+      setShowMissionComplete(true);
+      const timer = setTimeout(() => setShowMissionComplete(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    prevAllClaimedRef.current = allMissionBonusClaimed;
+  }, [allMissionBonusClaimed]);
 
   // Flash effect for 5-match
   useEffect(() => {
@@ -555,11 +569,12 @@ export default function RanchScreen() {
     if (slime) setSelectedSlime(slime);
   }, []);
 
-  // Share card handler (Improvement 5)
+  // Share card handler (R7: todayMergeCount 型安全化)
   const handleShareCard = useCallback(async () => {
     const state = useGameStore.getState();
     const discoveredCount = state.encyclopedia.filter(e => e.discovered).length;
     const totalCount = state.encyclopedia.length;
+    const todayMergeCount = state.todayMergeCount ?? 0;
 
     const dataUrl = await generateShareCard({
       slimes: state.slimes,
@@ -568,12 +583,13 @@ export default function RanchScreen() {
       discoveredCount,
       totalCount,
       highestTierReached: state.statistics.highestTierReached,
-      todayMergeCount: state.todayMergeCount,
+      todayMergeCount,
       todayCoins: state.coins,
     });
 
     if (dataUrl) {
-      const text = `\u30B9\u30E9\u30A4\u30E0\u7267\u5834 \u{1F40C} \u30E9\u30F3\u30AF${state.ranchRank} | \u56F3\u9451 ${discoveredCount}/${totalCount}\u7A2E #\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0`;
+      const mergeText = todayMergeCount > 0 ? ` 今日の合体: ${todayMergeCount}回` : '';
+      const text = `スライム牧場 🐌 ランク${state.ranchRank} | 図鑑 ${discoveredCount}/${totalCount}種${mergeText} #スライム牧場 #放置ゲーム`;
       await shareCard(dataUrl, text);
     }
   }, []);
@@ -729,6 +745,14 @@ export default function RanchScreen() {
           </Text>
         </View>
 
+        {/* 全ミッション達成フルスクリーン演出 (R7) */}
+        {showMissionComplete && (
+          <Animated.View style={styles.missionCompleteOverlay}>
+            <Text style={styles.missionCompleteText}>🎊 全ミッション達成！</Text>
+            <Text style={styles.missionCompleteGems}>+10 💎</Text>
+          </Animated.View>
+        )}
+
         {/* Tutorial overlay */}
         <TutorialOverlay />
 
@@ -739,6 +763,7 @@ export default function RanchScreen() {
         <MilestonePopup
           rank={pendingMilestoneRank}
           onClose={dismissMilestone}
+          onShare={handleShareCard}
         />
 
         {/* Slime info popup */}
@@ -891,5 +916,33 @@ const styles = StyleSheet.create({
     borderColor: '#FFD700',
     backgroundColor: 'rgba(255,215,0,0.15)',
     zIndex: 0,
+  },
+  missionCompleteOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 200,
+  },
+  missionCompleteText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+    marginBottom: 12,
+  },
+  missionCompleteGems: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#E0F7FA',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
 });

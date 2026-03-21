@@ -15,9 +15,10 @@ import { THEME_COLORS } from '../constants/colors';
 interface MilestonePopupProps {
   rank: number | null;
   onClose: () => void;
+  onShare?: () => void;
 }
 
-export const MilestonePopup: React.FC<MilestonePopupProps> = ({ rank, onClose }) => {
+export const MilestonePopup: React.FC<MilestonePopupProps> = ({ rank, onClose, onShare }) => {
   const milestone = rank !== null ? MILESTONES.find(m => m.rank === rank) : null;
 
   const scale = useSharedValue(0);
@@ -77,6 +78,12 @@ export const MilestonePopup: React.FC<MilestonePopupProps> = ({ rank, onClose })
             <Text style={styles.rewardLabel}>{'\u{1F381}'} 報酬</Text>
             <Text style={styles.rewardText}>{milestone.rewardDescription}</Text>
           </Animated.View>
+
+          {onShare && (
+            <Pressable style={styles.shareButton} onPress={() => { onShare(); onClose(); }}>
+              <Text style={styles.shareText}>🎉 シェアする</Text>
+            </Pressable>
+          )}
 
           <Pressable style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeText}>OK!</Text>
@@ -155,6 +162,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: THEME_COLORS.text,
+  },
+  shareButton: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 32,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  shareText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFF',
   },
   closeButton: {
     backgroundColor: '#FFD700',
