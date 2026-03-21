@@ -110,7 +110,7 @@ export function calculateOfflineReward(
       // 5% chance of mutation per hour
       const isMutation = Math.random() < 0.05;
       const family = COLOR_FAMILIES[Math.floor(Math.random() * COLOR_FAMILIES.length)];
-      const masterId = isMutation ? `${family}_1` : `${family}_1`;
+      const masterId = isMutation ? `${family}_2` : `${family}_1`;
       spawnedSlimes.push({ masterId, isMutation });
     }
   }
