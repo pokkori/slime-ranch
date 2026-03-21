@@ -22,7 +22,7 @@ import { TutorialOverlay } from '../../src/components/TutorialOverlay';
 import { canMerge } from '../../src/engine/merge-logic';
 import { SlimeInstance } from '../../src/types/slime';
 import { formatNumber } from '../../src/utils/format';
-import { playMergeSound, playCoinSound, playSplitSound } from '../../src/utils/sound';
+import { playMergeSound, playCoinSound, playSplitSound, setSfxVolume } from '../../src/utils/sound';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GROUND_Y = SCREEN_HEIGHT - 180;
@@ -44,6 +44,11 @@ export default function RanchScreen() {
   const coins = useGameStore(s => s.coins);
   const gems = useGameStore(s => s.gems);
   const settings = useGameStore(s => s.settings);
+
+  // Sync SE volume from settings on mount / change
+  useEffect(() => {
+    setSfxVolume(settings.sfxVolume);
+  }, [settings.sfxVolume]);
 
   const [selectedSlime, setSelectedSlime] = useState<SlimeInstance | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);

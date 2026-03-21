@@ -53,7 +53,8 @@ function playTone(
   const gain = ctx.createGain();
   osc.type = type;
   osc.frequency.value = frequency;
-  gain.gain.value = volume;
+  const vol = volume * masterVolume;
+  gain.gain.value = vol;
 
   osc.connect(gain);
   gain.connect(ctx.destination);
@@ -62,7 +63,7 @@ function playTone(
   const endTime = startTime + durationMs / 1000;
 
   // Fade out to avoid click
-  gain.gain.setValueAtTime(volume, startTime);
+  gain.gain.setValueAtTime(vol, startTime);
   gain.gain.exponentialRampToValueAtTime(0.001, endTime);
 
   osc.start(startTime);
@@ -87,10 +88,12 @@ function playSweep(
   const startTime = ctx.currentTime + startDelayMs / 1000;
   const endTime = startTime + durationMs / 1000;
 
+  const vol = volume * masterVolume;
+
   osc.frequency.setValueAtTime(freqStart, startTime);
   osc.frequency.exponentialRampToValueAtTime(freqEnd, endTime);
 
-  gain.gain.setValueAtTime(volume, startTime);
+  gain.gain.setValueAtTime(vol, startTime);
   gain.gain.exponentialRampToValueAtTime(0.001, endTime);
 
   osc.connect(gain);
@@ -115,12 +118,21 @@ function playNoiseBurst(durationMs: number, volume: number = 0.08): void {
   source.buffer = buffer;
 
   const gain = ctx.createGain();
-  gain.gain.value = volume;
+  gain.gain.value = volume * masterVolume;
 
   source.connect(gain);
   gain.connect(ctx.destination);
 
   source.start(ctx.currentTime);
+}
+
+/**
+ * Shop purchase: "ka-ching" sound.
+ */
+export function playPurchaseSound(): void {
+  playTone(800, 60, 'sine', 0.12);
+  playTone(1200, 60, 'sine', 0.12, 70);
+  playTone(1600, 80, 'sine', 0.15, 140);
 }
 
 // ─── Public SE API ──────────────────────────────────────

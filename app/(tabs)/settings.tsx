@@ -1,14 +1,30 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Switch, Pressable, Alert } from 'react-native';
 import { useGameStore } from '../../src/store/gameStore';
 import { THEME_COLORS } from '../../src/constants/colors';
 import { formatNumber, formatTime } from '../../src/utils/format';
+import { setSfxVolume, playMergeSound } from '../../src/utils/sound';
 
 export default function SettingsScreen() {
   const settings = useGameStore(s => s.settings);
   const statistics = useGameStore(s => s.statistics);
   const updateSettings = useGameStore(s => s.updateSettings);
   const resetGame = useGameStore(s => s.resetGame);
+
+  // Sync sfxVolume to sound engine on mount and change
+  useEffect(() => {
+    setSfxVolume(settings.sfxVolume);
+  }, [settings.sfxVolume]);
+
+  const handleVolumeChange = (delta: number) => {
+    const newVol = Math.max(0, Math.min(1, Math.round((settings.sfxVolume + delta) * 10) / 10));
+    updateSettings({ sfxVolume: newVol });
+    // Play a preview sound
+    if (settings.sfxEnabled && newVol > 0) {
+      setSfxVolume(newVol);
+      playMergeSound(2);
+    }
+  };
 
   const handleReset = () => {
     Alert.alert(
@@ -43,6 +59,18 @@ export default function SettingsScreen() {
           value={settings.sfxEnabled}
           onToggle={(v) => updateSettings({ sfxEnabled: v })}
         />
+        <View style={styles.volumeRow}>
+          <Text style={styles.settingLabel}>{'\u{1F3B5}'} SE音量</Text>
+          <View style={styles.volumeControls}>
+            <Pressable style={styles.volumeBtn} onPress={() => handleVolumeChange(-0.1)}>
+              <Text style={styles.volumeBtnText}>-</Text>
+            </Pressable>
+            <Text style={styles.volumeValue}>{Math.round(settings.sfxVolume * 100)}%</Text>
+            <Pressable style={styles.volumeBtn} onPress={() => handleVolumeChange(0.1)}>
+              <Text style={styles.volumeBtnText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
         <SettingRow
           label="&#x1F4F3; 振動"
           value={settings.hapticsEnabled}
@@ -132,6 +160,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12,
   },
   settingLabel: { fontSize: 15, color: THEME_COLORS.text },
+  volumeRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  volumeControls: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  volumeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: THEME_COLORS.primary, justifyContent: 'center', alignItems: 'center',
+  },
+  volumeBtnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold', lineHeight: 20 },
+  volumeValue: { fontSize: 14, fontWeight: '600', color: THEME_COLORS.text, minWidth: 40, textAlign: 'center' },
   statRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     paddingHorizontal: 14, paddingVertical: 10,

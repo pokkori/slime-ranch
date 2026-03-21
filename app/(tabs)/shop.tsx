@@ -6,6 +6,7 @@ import { ShopItemCard } from '../../src/components/ShopItemCard';
 import { CoinDisplay } from '../../src/components/CoinDisplay';
 import { THEME_COLORS } from '../../src/constants/colors';
 import { ShopCategory, ShopItem } from '../../src/types/shop';
+import { playPurchaseSound } from '../../src/utils/sound';
 
 const CATEGORIES: { key: ShopCategory; label: string; icon: string }[] = [
   { key: 'decoration', label: '装飾', icon: '🎨' },
@@ -25,6 +26,7 @@ export default function ShopScreen() {
   const addBooster = useGameStore(s => s.addBooster);
   const ranch = useGameStore(s => s.ranch);
   const unlockSlot = useGameStore(s => s.unlockSlot);
+  const sfxEnabled = useGameStore(s => s.settings.sfxEnabled);
 
   // Track purchased items locally (in a real app this would be persisted)
   const [purchasedItems, setPurchasedItems] = useState<Set<string>>(new Set());
@@ -83,6 +85,8 @@ export default function ShopScreen() {
       case 'max_slime_up':
         break;
     }
+
+    if (sfxEnabled) playPurchaseSound();
 
     if (item.maxPurchase === 1) {
       setPurchasedItems(prev => new Set([...prev, item.itemId]));
