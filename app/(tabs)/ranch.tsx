@@ -639,6 +639,7 @@ export default function RanchScreen() {
 
   const rankEmojis = ['\u2B50', '\u{1F331}', '\u{1F33F}', '\u{1F333}', '\u2728', '\u{1F451}', '\u{1F308}'];
   const rankEmoji = rankEmojis[ranchRank] || '\u2B50';
+  const todayMergeCount = useGameStore(s => s.todayMergeCount);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bgColors.top }]}>
@@ -653,6 +654,7 @@ export default function RanchScreen() {
               {currentMilestone && (
                 <Text style={styles.rankName}>{currentMilestone.name}</Text>
               )}
+              <Text style={styles.todayMerge}>{`\u4ECA\u65E5\u306E\u5408\u4F53: ${todayMergeCount}\u56DE`}</Text>
             </View>
           </View>
           <View style={styles.headerRight}>
@@ -829,6 +831,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FFD700',
     fontWeight: '600',
+  },
+  todayMerge: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    marginTop: 1,
   },
   shareBtn: {
     width: 32,

@@ -2,7 +2,7 @@
  * Canvas OGP share card generator.
  * Generates a 1200x630 image with ranch info for social sharing.
  */
-import { Platform } from 'react-native';
+import { Platform, Share } from 'react-native';
 import { SLIME_MASTER } from '../constants/slimes';
 import { BACKGROUND_COLORS } from '../constants/colors';
 import { MILESTONES } from '../constants/milestones';
@@ -180,33 +180,24 @@ export async function generateShareCard(params: ShareCardParams): Promise<string
  * Share the generated card via navigator.share or clipboard fallback.
  */
 export async function shareCard(dataUrl: string, text: string): Promise<void> {
-  if (Platform.OS !== 'web') return;
-
+  if (Platform.OS !== 'web') {
+    // ネイティブ: RN Share.share テキストのみ
+    await Share.share({ message: text });
+    return;
+  }
+  // Web: Canvas dataUrl → Blob → File → navigator.share
   try {
-    // Try to convert data URL to blob for sharing
-    if (navigator.share) {
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], 'slime-ranch.png', { type: 'image/png' });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          text,
-          files: [file],
-        });
-        return;
-      }
-
-      // Fallback: share text only
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    const file = new File([blob], 'slime-ranch.png', { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ text, files: [file] });
+    } else if (navigator.share) {
       await navigator.share({ text });
-      return;
-    }
-
-    // Clipboard fallback
-    if (navigator.clipboard) {
+    } else if (navigator.clipboard) {
       await navigator.clipboard.writeText(text);
     }
   } catch {
-    // User cancelled or not supported
+    // ignore
   }
 }
