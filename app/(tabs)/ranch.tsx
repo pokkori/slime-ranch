@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { View, StyleSheet, Dimensions, Text, Platform } from 'react-native';
+import { View, StyleSheet, Dimensions, Text, Platform, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -11,6 +11,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../../src/store/gameStore';
 import { SLIME_MASTER } from '../../src/constants/slimes';
+import { MILESTONES } from '../../src/constants/milestones';
 import { BACKGROUND_COLORS, THEME_COLORS } from '../../src/constants/colors';
 import { SlimeBlob } from '../../src/rendering/SlimeBlob';
 import { CoinFloat } from '../../src/rendering/CoinFloat';
@@ -19,16 +20,22 @@ import { CoinDisplay } from '../../src/components/CoinDisplay';
 import { SlimeInfo } from '../../src/components/SlimeInfo';
 import { OfflineRewardModal } from '../../src/components/OfflineRewardModal';
 import { TutorialOverlay } from '../../src/components/TutorialOverlay';
-import { canMerge } from '../../src/engine/merge-logic';
+import { MilestonePopup } from '../../src/components/MilestonePopup';
+import { canMerge, findMergeGroup, MERGE_DISTANCE } from '../../src/engine/merge-logic';
 import { SlimeInstance } from '../../src/types/slime';
 import { formatNumber } from '../../src/utils/format';
-import { playMergeSound, playCoinSound, playSplitSound, setSfxVolume } from '../../src/utils/sound';
+import {
+  playMergeSound, playCoinSound, playSplitSound, setSfxVolume,
+  startBGM, stopBGM, setBgmVolume, playComboSound,
+} from '../../src/utils/sound';
+import { generateShareCard, shareCard } from '../../src/utils/share-card';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GROUND_Y = SCREEN_HEIGHT - 180;
 const WALL_LEFT = 10;
 const WALL_RIGHT = SCREEN_WIDTH - 10;
-const MERGE_DISTANCE = 60; // distance threshold for drag-merge
+
+const AUTO_SPAWN_INTERVAL_MS = 30000; // 30 seconds base
 
 export default function RanchScreen() {
   const slimes = useGameStore(s => s.slimes);
@@ -37,30 +44,70 @@ export default function RanchScreen() {
   const mergeAnimation = useGameStore(s => s.mergeAnimation);
   const tapSlime = useGameStore(s => s.tapSlime);
   const tryMerge = useGameStore(s => s.tryMerge);
+  const tryMultiMerge = useGameStore(s => s.tryMultiMerge);
   const completeMergeAnimation = useGameStore(s => s.completeMergeAnimation);
   const tickCoins = useGameStore(s => s.tickCoins);
   const clearFloatingCoin = useGameStore(s => s.clearFloatingCoin);
   const updateSlimePositions = useGameStore(s => s.updateSlimePositions);
+  const autoSpawnSlime = useGameStore(s => s.autoSpawnSlime);
   const coins = useGameStore(s => s.coins);
   const gems = useGameStore(s => s.gems);
   const settings = useGameStore(s => s.settings);
+  const ranchRank = useGameStore(s => s.ranchRank);
+  const pendingMilestoneRank = useGameStore(s => s.pendingMilestoneRank);
+  const dismissMilestone = useGameStore(s => s.dismissMilestone);
+  const comboCounter = useGameStore(s => s.comboCounter);
+  const flashActive = useGameStore(s => s.flashActive);
+  const encyclopedia = useGameStore(s => s.encyclopedia);
 
   // Sync SE volume from settings on mount / change
   useEffect(() => {
     setSfxVolume(settings.sfxVolume);
   }, [settings.sfxVolume]);
 
+  // Sync BGM volume
+  useEffect(() => {
+    setBgmVolume(settings.bgmVolume);
+  }, [settings.bgmVolume]);
+
+  // BGM: start on foreground, stop on background
+  useEffect(() => {
+    if (settings.bgmEnabled) {
+      startBGM(ranch.backgroundTheme);
+    } else {
+      stopBGM();
+    }
+    return () => {
+      stopBGM();
+    };
+  }, [settings.bgmEnabled, ranch.backgroundTheme]);
+
   const [selectedSlime, setSelectedSlime] = useState<SlimeInstance | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+  const [comboDisplay, setComboDisplay] = useState<{ level: number; visible: boolean }>({ level: 0, visible: false });
+  const [flash, setFlash] = useState(false);
   const animationRef = useRef<number | null>(null);
   const lastTickRef = useRef(Date.now());
   const coinTickRef = useRef(Date.now());
+  const autoSpawnTickRef = useRef(Date.now());
   const draggedSlimeRef = useRef<string | null>(null);
 
   // Simple physics simulation
   const slimePhysicsRef = useRef<Map<string, { vx: number; vy: number }>>(new Map());
 
   const bgColors = BACKGROUND_COLORS[ranch.backgroundTheme] || BACKGROUND_COLORS.meadow;
+
+  // Flash effect for 5-match
+  useEffect(() => {
+    if (flashActive) {
+      setFlash(true);
+      const timer = setTimeout(() => {
+        setFlash(false);
+        useGameStore.setState({ flashActive: false });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [flashActive]);
 
   // Screen shake shared value for Tier 4+ merges
   const shakeX = useSharedValue(0);
@@ -97,7 +144,6 @@ export default function RanchScreen() {
     if (Platform.OS === 'web') return;
     try {
       if (resultTier >= 6) {
-        // Legend: Heavy x2 + Success notification
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         setTimeout(() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -106,16 +152,13 @@ export default function RanchScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }, 200);
       } else if (resultTier >= 5) {
-        // Elder: Heavy + Success notification
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         setTimeout(() => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }, 100);
       } else if (resultTier >= 3) {
-        // Teen+: Medium
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } else {
-        // Normal: Light
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch {
@@ -138,10 +181,52 @@ export default function RanchScreen() {
     }
   }, [settings.hapticsEnabled]);
 
+  // Combo chain helper
+  const performChainMerge = useCallback((resultInstanceId: string, chainLevel: number) => {
+    if (chainLevel >= 3) return; // Max 3 chains
+
+    setTimeout(() => {
+      const state = useGameStore.getState();
+      const resultSlime = state.slimes.find(s => s.instanceId === resultInstanceId);
+      if (!resultSlime) return;
+
+      const group = findMergeGroup(state.slimes, resultSlime, resultSlime.x, resultSlime.y);
+      if (group) {
+        const midX = resultSlime.x;
+        const midY = resultSlime.y;
+        const master = SLIME_MASTER[group.resultMasterId];
+        const resultTier = master ? master.tier : 1;
+
+        useGameStore.getState().tryMultiMerge(group, midX, midY);
+        useGameStore.setState({ comboCounter: chainLevel + 1 });
+
+        // Show combo display
+        setComboDisplay({ level: chainLevel + 1, visible: true });
+        setTimeout(() => setComboDisplay(prev => ({ ...prev, visible: false })), 1000);
+
+        if (settings.sfxEnabled) {
+          playComboSound(chainLevel + 1);
+          playMergeSound(resultTier);
+        }
+        triggerMergeHaptic(resultTier);
+        if (resultTier >= 4) triggerScreenShake();
+
+        // Check for further chains
+        const newState = useGameStore.getState();
+        const newResultSlime = newState.slimes.find(s => {
+          const m = SLIME_MASTER[s.masterId];
+          return m && m.colorFamily === master?.colorFamily && m.tier === master?.tier && s.isNew;
+        });
+        if (newResultSlime) {
+          performChainMerge(newResultSlime.instanceId, chainLevel + 1);
+        }
+      }
+    }, 400);
+  }, [settings.sfxEnabled, triggerMergeHaptic, triggerScreenShake]);
+
   // Drag handlers
   const handleDragStart = useCallback((instanceId: string) => {
     draggedSlimeRef.current = instanceId;
-    // Pause physics for dragged slime
     const physics = slimePhysicsRef.current.get(instanceId);
     if (physics) {
       physics.vx = 0;
@@ -150,7 +235,6 @@ export default function RanchScreen() {
   }, []);
 
   const handleDragMove = useCallback((instanceId: string, x: number, y: number) => {
-    // Find nearest merge-compatible slime
     const currentSlimes = useGameStore.getState().slimes;
     const dragged = currentSlimes.find(s => s.instanceId === instanceId);
     if (!dragged) return;
@@ -184,7 +268,48 @@ export default function RanchScreen() {
       return;
     }
 
-    // Find merge target
+    // First: try 3+ match merge
+    const group = findMergeGroup(currentSlimes, dragged, x, y);
+    if (group) {
+      const midX = x;
+      const midY = y;
+      const master = SLIME_MASTER[group.resultMasterId];
+      const resultTier = master ? master.tier : 1;
+
+      const merged = tryMultiMerge(group, midX, midY);
+      if (merged) {
+        useGameStore.setState({ comboCounter: 1 });
+
+        // Show combo display for 3-match
+        setComboDisplay({ level: 1, visible: true });
+        setTimeout(() => setComboDisplay(prev => ({ ...prev, visible: false })), 1000);
+
+        triggerMergeHaptic(resultTier);
+        if (settings.sfxEnabled) {
+          playComboSound(1);
+          playMergeSound(resultTier);
+        }
+        if (resultTier >= 4 || group.is5Match) {
+          triggerScreenShake();
+        }
+
+        // Check for chain merges
+        setTimeout(() => {
+          const newState = useGameStore.getState();
+          const newResultSlime = newState.slimes.find(s => {
+            const m = SLIME_MASTER[s.masterId];
+            return m && m.colorFamily === master?.colorFamily && m.tier === master?.tier && s.isNew;
+          });
+          if (newResultSlime) {
+            performChainMerge(newResultSlime.instanceId, 1);
+          }
+        }, 300);
+      }
+      setMergeTarget(null);
+      return;
+    }
+
+    // Fallback: standard 1:1 merge
     let bestId: string | null = null;
     let bestDist = MERGE_DISTANCE;
 
@@ -204,14 +329,13 @@ export default function RanchScreen() {
     if (bestId) {
       const target = currentSlimes.find(s => s.instanceId === bestId);
       const masterTarget = target ? SLIME_MASTER[target.masterId] : null;
-      // The result tier is one above the current tier
       const resultTier = masterTarget ? Math.min(masterTarget.tier + 1, 6) : 1;
 
       const merged = tryMerge(instanceId, bestId);
       if (merged) {
+        useGameStore.setState({ comboCounter: 0 });
         triggerMergeHaptic(resultTier);
         if (settings.sfxEnabled) playMergeSound(resultTier);
-        // Screen shake for Tier 4+ results
         if (resultTier >= 4) {
           triggerScreenShake();
         }
@@ -219,7 +343,18 @@ export default function RanchScreen() {
     }
 
     setMergeTarget(null);
-  }, [tryMerge, triggerMergeHaptic, triggerScreenShake]);
+  }, [tryMerge, tryMultiMerge, triggerMergeHaptic, triggerScreenShake, performChainMerge]);
+
+  // Calculate spawn rate bonus from decorations
+  const getSpawnRateBonus = useCallback(() => {
+    let bonus = 1.0;
+    for (const slot of useGameStore.getState().ranch.slots) {
+      if (slot.bonus?.type === 'spawn_rate') {
+        bonus *= slot.bonus.multiplier;
+      }
+    }
+    return bonus;
+  }, []);
 
   // Physics update loop
   const updatePhysics = useCallback(() => {
@@ -256,7 +391,6 @@ export default function RanchScreen() {
     // Update each slime
     for (const slime of currentSlimes) {
       if (slime.isMerging) continue;
-      // Skip physics for dragged slime
       if (draggedSlimeRef.current === slime.instanceId) continue;
 
       const master = SLIME_MASTER[slime.masterId];
@@ -298,13 +432,12 @@ export default function RanchScreen() {
       updates.push({ id: slime.instanceId, x: newX, y: newY });
     }
 
-    // Slime-slime collisions (no auto-merge, collisions only)
+    // Slime-slime collisions
     for (let i = 0; i < currentSlimes.length; i++) {
       for (let j = i + 1; j < currentSlimes.length; j++) {
         const a = currentSlimes[i];
         const b = currentSlimes[j];
         if (a.isMerging || b.isMerging) continue;
-        // Skip collision for dragged slime
         if (draggedSlimeRef.current === a.instanceId || draggedSlimeRef.current === b.instanceId) continue;
 
         const masterA = SLIME_MASTER[a.masterId];
@@ -370,6 +503,14 @@ export default function RanchScreen() {
       }
     }
 
+    // Auto-spawn check (Improvement 6)
+    const spawnBonus = getSpawnRateBonus();
+    const adjustedInterval = AUTO_SPAWN_INTERVAL_MS / spawnBonus;
+    if (now - autoSpawnTickRef.current >= adjustedInterval) {
+      autoSpawnTickRef.current = now;
+      autoSpawnSlime();
+    }
+
     animationRef.current = requestAnimationFrame(updatePhysics);
   }, []);
 
@@ -391,16 +532,94 @@ export default function RanchScreen() {
     if (slime) setSelectedSlime(slime);
   }, []);
 
+  // Share card handler (Improvement 5)
+  const handleShareCard = useCallback(async () => {
+    const state = useGameStore.getState();
+    const discoveredCount = state.encyclopedia.filter(e => e.discovered).length;
+    const totalCount = state.encyclopedia.length;
+
+    const dataUrl = await generateShareCard({
+      slimes: state.slimes,
+      backgroundTheme: state.ranch.backgroundTheme,
+      ranchRank: state.ranchRank,
+      discoveredCount,
+      totalCount,
+      highestTierReached: state.statistics.highestTierReached,
+    });
+
+    if (dataUrl) {
+      const text = `\u30B9\u30E9\u30A4\u30E0\u7267\u5834 \u{1F40C} \u30E9\u30F3\u30AF${state.ranchRank} | \u56F3\u9451 ${discoveredCount}/${totalCount}\u7A2E #\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0`;
+      await shareCard(dataUrl, text);
+    }
+  }, []);
+
+  // Milestone progress calculation
+  const currentMilestone = MILESTONES.find(m => m.rank === ranchRank);
+  const nextMilestone = MILESTONES.find(m => m.rank === ranchRank + 1);
+  const discoveredCount = encyclopedia.filter(e => e.discovered).length;
+
+  // Calculate progress to next rank
+  let progressPercent = 100;
+  if (nextMilestone) {
+    if (nextMilestone.condition === 'first_merge') {
+      const state = useGameStore.getState();
+      progressPercent = state.statistics.totalMerges >= 1 ? 100 : 0;
+    } else if (nextMilestone.condition === 'discover_5') {
+      progressPercent = Math.min(100, (discoveredCount / 5) * 100);
+    } else if (nextMilestone.condition === 'tier3_owned') {
+      const hasTier3 = slimes.some(s => { const m = SLIME_MASTER[s.masterId]; return m && m.tier >= 3; });
+      progressPercent = hasTier3 ? 100 : 0;
+    } else if (nextMilestone.condition === 'discover_15') {
+      progressPercent = Math.min(100, (discoveredCount / 15) * 100);
+    } else if (nextMilestone.condition === 'tier5_owned') {
+      const hasTier5 = slimes.some(s => { const m = SLIME_MASTER[s.masterId]; return m && m.tier >= 5; });
+      progressPercent = hasTier5 ? 100 : 0;
+    } else if (nextMilestone.condition === 'complete_all') {
+      progressPercent = Math.min(100, (discoveredCount / 36) * 100);
+    }
+  }
+
+  const rankEmojis = ['\u2B50', '\u{1F331}', '\u{1F33F}', '\u{1F333}', '\u2728', '\u{1F451}', '\u{1F308}'];
+  const rankEmoji = rankEmojis[ranchRank] || '\u2B50';
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bgColors.top }]}>
-        {/* Header */}
+        {/* Header with rank badge and share button */}
         <View style={styles.header}>
-          <Text style={styles.title}>スライム牧場</Text>
-          <CoinDisplay />
+          <View style={styles.headerLeft}>
+            <Text style={styles.rankBadge}>{rankEmoji}</Text>
+            <View>
+              <Text style={styles.title}>{'\u30B9\u30E9\u30A4\u30E0\u7267\u5834'}</Text>
+              {currentMilestone && (
+                <Text style={styles.rankName}>{currentMilestone.name}</Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.headerRight}>
+            <Pressable style={styles.shareBtn} onPress={handleShareCard}>
+              <Text style={styles.shareBtnText}>{'\u{1F4F7}'}</Text>
+            </Pressable>
+            <CoinDisplay />
+          </View>
         </View>
+
+        {/* Rank progress bar */}
+        {nextMilestone && (
+          <View style={styles.rankProgressContainer}>
+            <Text style={styles.rankProgressLabel}>
+              {'\u6B21'}: {nextMilestone.name}
+            </Text>
+            <View style={styles.rankProgressBg}>
+              <View style={[styles.rankProgressFill, { width: `${progressPercent}%` }]} />
+            </View>
+          </View>
+        )}
 
         {/* Ranch canvas with screen shake support */}
         <Animated.View style={[styles.canvas, { backgroundColor: bgColors.bottom }, canvasShakeStyle]}>
+          {/* 5-match flash overlay */}
+          {flash && <View style={styles.flashOverlay} />}
+
           {/* Ground */}
           <View style={[styles.ground, { backgroundColor: bgColors.ground, top: GROUND_Y - 80 }]}>
             <View style={styles.grassRow}>
@@ -426,6 +645,13 @@ export default function RanchScreen() {
               }]} />
             );
           })()}
+
+          {/* Combo counter display */}
+          {comboDisplay.visible && comboDisplay.level > 0 && (
+            <View style={styles.comboContainer}>
+              <Text style={styles.comboText}>COMBO x{comboDisplay.level + 1}!</Text>
+            </View>
+          )}
 
           {/* Slimes */}
           {slimes.map(slime => (
@@ -479,6 +705,12 @@ export default function RanchScreen() {
         {/* Offline reward modal */}
         <OfflineRewardModal />
 
+        {/* Milestone popup */}
+        <MilestonePopup
+          rank={pendingMilestoneRank}
+          onClose={dismissMilestone}
+        />
+
         {/* Slime info popup */}
         <SlimeInfo
           slime={selectedSlime}
@@ -497,19 +729,78 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: THEME_COLORS.headerBg,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rankBadge: {
+    fontSize: 24,
+  },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#FFF',
+  },
+  rankName: {
+    fontSize: 11,
+    color: '#FFD700',
+    fontWeight: '600',
+  },
+  shareBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shareBtnText: {
+    fontSize: 16,
+  },
+  rankProgressContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  rankProgressLabel: {
+    fontSize: 10,
+    color: '#FFF',
+    marginBottom: 2,
+  },
+  rankProgressBg: {
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  rankProgressFill: {
+    height: '100%',
+    backgroundColor: '#FFD700',
+    borderRadius: 2,
   },
   canvas: {
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
+  },
+  flashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    zIndex: 100,
   },
   ground: {
     position: 'absolute',
@@ -528,6 +819,22 @@ const styles = StyleSheet.create({
   },
   grassEmoji: {
     fontSize: 18,
+  },
+  comboContainer: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  comboText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
   statusBar: {
     flexDirection: 'row',

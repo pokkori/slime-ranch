@@ -7,10 +7,23 @@ import { Platform } from 'react-native';
 
 let audioCtx: AudioContext | null = null;
 let masterVolume = 0.7; // 0.0–1.0, synced with settings.sfxVolume
+let bgmVolume = 0.4; // 0.0–1.0, synced with settings.bgmVolume
+let bgmPlaying = false;
+let bgmGainNode: GainNode | null = null;
+let bgmOscillators: OscillatorNode[] = [];
+let bgmIntervalId: ReturnType<typeof setInterval> | null = null;
 
 /** Set the master SE volume (0.0–1.0). Called from settings. */
 export function setSfxVolume(v: number): void {
   masterVolume = Math.max(0, Math.min(1, v));
+}
+
+/** Set the BGM volume (0.0–1.0). Called from settings. */
+export function setBgmVolume(v: number): void {
+  bgmVolume = Math.max(0, Math.min(1, v));
+  if (bgmGainNode) {
+    bgmGainNode.gain.setValueAtTime(bgmVolume * 0.08, bgmGainNode.context.currentTime);
+  }
 }
 
 function getAudioContext(): AudioContext | null {
@@ -188,4 +201,124 @@ export function playOfflineRewardSound(): void {
     playTone(1200 + Math.random() * 200, 30, 'sine', 0.07, i * 60);
     playTone(1600 + Math.random() * 200, 30, 'sine', 0.07, i * 60 + 20);
   }
+}
+
+// ─── BGM System ────────────────────────────────────────
+
+/** Pentatonic scales by background theme key */
+const BGM_SCALES: Record<string, number[]> = {
+  meadow: [261.6, 293.7, 329.6, 392.0, 440.0],  // C major pentatonic: C-D-E-G-A
+  forest: [220.0, 261.6, 293.7, 329.6, 392.0],   // A minor pentatonic: A-C-D-E-G
+  beach:  [349.2, 392.0, 440.0, 523.3, 587.3],    // F major pentatonic: F-G-A-C-D
+  volcano: [293.7, 349.2, 392.0, 440.0, 523.3],   // D minor pentatonic: D-F-G-A-C
+  sky_garden: [261.6, 293.7, 329.6, 392.0, 440.0], // C major
+  crystal_cave: [220.0, 261.6, 293.7, 329.6, 392.0], // A minor
+};
+
+/** Base drone frequencies by theme */
+const BGM_DRONE: Record<string, number> = {
+  meadow: 65.4,     // C2
+  forest: 55.0,     // A1
+  beach: 87.3,      // F2
+  volcano: 73.4,    // D2
+  sky_garden: 65.4,  // C2
+  crystal_cave: 55.0, // A1
+};
+
+/**
+ * Start procedural BGM loop.
+ * Pentatonic random melody (4 bar loop) + low drone.
+ */
+export function startBGM(theme: string = 'meadow'): void {
+  if (bgmPlaying) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  bgmPlaying = true;
+
+  const scale = BGM_SCALES[theme] || BGM_SCALES.meadow;
+  const droneFreq = BGM_DRONE[theme] || BGM_DRONE.meadow;
+
+  // Create master gain for BGM
+  bgmGainNode = ctx.createGain();
+  bgmGainNode.gain.value = bgmVolume * 0.08;
+  bgmGainNode.connect(ctx.destination);
+
+  // Bass drone oscillator
+  const drone = ctx.createOscillator();
+  drone.type = 'sine';
+  drone.frequency.value = droneFreq;
+  const droneGain = ctx.createGain();
+  droneGain.gain.value = 0.6;
+  drone.connect(droneGain);
+  droneGain.connect(bgmGainNode);
+  drone.start();
+  bgmOscillators.push(drone);
+
+  // Melody loop: play random pentatonic notes at intervals
+  // 4 bars x 4 beats = 16 notes, BPM ~80 => beat = 750ms
+  const beatMs = 750;
+  let noteIndex = 0;
+
+  bgmIntervalId = setInterval(() => {
+    if (!bgmPlaying || !bgmGainNode) return;
+
+    const note = scale[Math.floor(Math.random() * scale.length)];
+    // Occasionally play one octave up
+    const octaveUp = Math.random() < 0.3 ? 2 : 1;
+    const freq = note * octaveUp;
+
+    const osc = ctx.createOscillator();
+    osc.type = noteIndex % 4 === 0 ? 'triangle' : 'sine';
+    osc.frequency.value = freq;
+
+    const noteGain = ctx.createGain();
+    const vol = 0.4 + Math.random() * 0.3;
+    noteGain.gain.setValueAtTime(vol, ctx.currentTime);
+    noteGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+
+    osc.connect(noteGain);
+    noteGain.connect(bgmGainNode);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.7);
+
+    noteIndex = (noteIndex + 1) % 16;
+  }, beatMs);
+}
+
+/**
+ * Stop BGM.
+ */
+export function stopBGM(): void {
+  bgmPlaying = false;
+
+  for (const osc of bgmOscillators) {
+    try { osc.stop(); } catch { /* already stopped */ }
+  }
+  bgmOscillators = [];
+
+  if (bgmIntervalId !== null) {
+    clearInterval(bgmIntervalId);
+    bgmIntervalId = null;
+  }
+
+  if (bgmGainNode) {
+    bgmGainNode.disconnect();
+    bgmGainNode = null;
+  }
+}
+
+/** Check if BGM is currently playing */
+export function isBGMPlaying(): boolean {
+  return bgmPlaying;
+}
+
+/**
+ * Combo sound effect for 3-match / chain merges.
+ */
+export function playComboSound(comboLevel: number): void {
+  const baseFreq = 600 + comboLevel * 200;
+  playTone(baseFreq, 60, 'sine', 0.15);
+  playTone(baseFreq * 1.5, 80, 'sine', 0.12, 70);
+  playTone(baseFreq * 2, 100, 'sine', 0.10, 150);
 }

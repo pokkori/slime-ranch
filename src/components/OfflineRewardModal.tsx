@@ -11,6 +11,7 @@ import Animated, {
 import { useGameStore } from '../store/gameStore';
 import { formatNumber, formatTime } from '../utils/format';
 import { THEME_COLORS } from '../constants/colors';
+import { SLIME_MASTER } from '../constants/slimes';
 import { playOfflineRewardSound } from '../utils/sound';
 
 export const OfflineRewardModal: React.FC = () => {
@@ -42,6 +43,29 @@ export const OfflineRewardModal: React.FC = () => {
             <Text style={styles.coinLabel}>{'\u{1F4B0}'} {'\u7372\u5F97\u30B3\u30A4\u30F3'}:</Text>
             <Text style={styles.coinValue}>{formatNumber(reward.coins)}</Text>
           </View>
+
+          {/* Offline spawned slimes section */}
+          {reward.spawnedSlimes && reward.spawnedSlimes.length > 0 && (
+            <View style={styles.spawnSection}>
+              <Text style={styles.spawnTitle}>{'\u{1F331}'} {'\u7559\u5B88\u4E2D\u306B\u8D77\u304D\u305F\u3053\u3068'}</Text>
+              {reward.spawnedSlimes.map((s, i) => {
+                const master = SLIME_MASTER[s.masterId];
+                const name = master ? master.name : s.masterId;
+                if (s.isMutation) {
+                  return (
+                    <Text key={i} style={styles.spawnMutation}>
+                      {'\u2728'} {'\u7A81\u7136\u5909\u7570\u304C\u767A\u751F\uFF01\u8679\u8272\u306E'}{name}{'\u304C\u73FE\u308C\u307E\u3057\u305F\uFF01'}
+                    </Text>
+                  );
+                }
+                return (
+                  <Text key={i} style={styles.spawnNormal}>
+                    {'\u{1F40C}'} {'\u65B0\u3057\u3044'}{name}{'\u304C\u3084\u3063\u3066\u304D\u307E\u3057\u305F\uFF01'}
+                  </Text>
+                );
+              })}
+            </View>
+          )}
 
           {/* Prominent ad button with glow effect */}
           <View style={styles.doubleButtonContainer}>
@@ -189,6 +213,32 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: 'bold',
     fontSize: 12,
+  },
+  spawnSection: {
+    width: '100%',
+    backgroundColor: '#F1F8E9',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+  },
+  spawnTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: THEME_COLORS.primary,
+    marginBottom: 6,
+  },
+  spawnNormal: {
+    fontSize: 12,
+    color: THEME_COLORS.text,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  spawnMutation: {
+    fontSize: 12,
+    color: '#FF9800',
+    fontWeight: 'bold',
+    marginTop: 2,
+    lineHeight: 18,
   },
   normalButton: {
     paddingHorizontal: 20,

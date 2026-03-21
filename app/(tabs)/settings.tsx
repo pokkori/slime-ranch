@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Switch, Pressable, Alert } from 're
 import { useGameStore } from '../../src/store/gameStore';
 import { THEME_COLORS } from '../../src/constants/colors';
 import { formatNumber, formatTime } from '../../src/utils/format';
-import { setSfxVolume, playMergeSound } from '../../src/utils/sound';
+import { setSfxVolume, setBgmVolume, playMergeSound } from '../../src/utils/sound';
 
 export default function SettingsScreen() {
   const settings = useGameStore(s => s.settings);
@@ -15,6 +15,16 @@ export default function SettingsScreen() {
   useEffect(() => {
     setSfxVolume(settings.sfxVolume);
   }, [settings.sfxVolume]);
+
+  // Sync bgmVolume
+  useEffect(() => {
+    setBgmVolume(settings.bgmVolume);
+  }, [settings.bgmVolume]);
+
+  const handleBgmVolumeChange = (delta: number) => {
+    const newVol = Math.max(0, Math.min(1, Math.round((settings.bgmVolume + delta) * 10) / 10));
+    updateSettings({ bgmVolume: newVol });
+  };
 
   const handleVolumeChange = (delta: number) => {
     const newVol = Math.max(0, Math.min(1, Math.round((settings.sfxVolume + delta) * 10) / 10));
@@ -54,6 +64,18 @@ export default function SettingsScreen() {
           value={settings.bgmEnabled}
           onToggle={(v) => updateSettings({ bgmEnabled: v })}
         />
+        <View style={styles.volumeRow}>
+          <Text style={styles.settingLabel}>{'\u{1F3B5}'} BGM音量</Text>
+          <View style={styles.volumeControls}>
+            <Pressable style={styles.volumeBtn} onPress={() => handleBgmVolumeChange(-0.1)}>
+              <Text style={styles.volumeBtnText}>-</Text>
+            </Pressable>
+            <Text style={styles.volumeValue}>{Math.round(settings.bgmVolume * 100)}%</Text>
+            <Pressable style={styles.volumeBtn} onPress={() => handleBgmVolumeChange(0.1)}>
+              <Text style={styles.volumeBtnText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
         <SettingRow
           label="&#x1F50A; 効果音"
           value={settings.sfxEnabled}

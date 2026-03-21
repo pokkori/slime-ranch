@@ -10,9 +10,13 @@ import { INITIAL_RANCH_SLOTS, SLIMES_PER_SLOT, INITIAL_MAX_SLIMES } from '../con
 import { ALL_ACHIEVEMENTS } from '../constants/achievements';
 import { selectDailyMissions, ALL_COMPLETE_BONUS_GEMS } from '../constants/missions';
 import { DECORATION_BONUSES } from '../constants/shop-items';
-import { canMerge, getMergeResult, getRandomTier1MasterId } from '../engine/merge-logic';
+import { canMerge, getMergeResult, getRandomTier1MasterId, findMergeGroup, MergeGroupResult } from '../engine/merge-logic';
 import { calculateOfflineReward, OfflineRewardResult } from '../engine/offline-reward';
+import { MILESTONES } from '../constants/milestones';
 import { getTodayString } from '../utils/format';
+
+const SPAWN_WALL_LEFT = 10;
+const SPAWN_WALL_RIGHT = 370; // approximate screen width - 10
 
 function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -81,11 +85,28 @@ export interface GameState {
     isRare: boolean;
   } | null;
 
+  // Ranch rank (milestones)
+  ranchRank: number;
+  pendingMilestoneRank: number | null;
+
+  // Auto spawn timer
+  lastAutoSpawnTime: number;
+
+  // Combo counter for 3-match chains
+  comboCounter: number;
+
+  // 5-match flash indicator
+  flashActive: boolean;
+
   // Actions
   initGame: () => void;
   tapSlime: (instanceId: string) => void;
   tryMerge: (aId: string, bId: string) => boolean;
+  tryMultiMerge: (group: MergeGroupResult, midX: number, midY: number) => boolean;
   completeMergeAnimation: () => void;
+  checkMilestone: () => void;
+  dismissMilestone: () => void;
+  autoSpawnSlime: () => boolean;
   addCoins: (amount: number) => void;
   spendCoins: (amount: number) => boolean;
   spendGems: (amount: number) => boolean;
@@ -164,6 +185,11 @@ export const useGameStore = create<GameState>()(
       pendingOfflineReward: null,
       floatingCoins: [],
       mergeAnimation: null,
+      ranchRank: 0,
+      pendingMilestoneRank: null,
+      lastAutoSpawnTime: Date.now(),
+      comboCounter: 0,
+      flashActive: false,
 
       initGame: () => {
         const state = get();
@@ -329,6 +355,186 @@ export const useGameStore = create<GameState>()(
           statistics: stats,
         });
         get().updateMissionProgress('merge_slimes', 1);
+        get().checkMilestone();
+      },
+
+      tryMultiMerge: (group: MergeGroupResult, midX: number, midY: number) => {
+        const state = get();
+
+        // Remove all consumed slimes
+        const filtered = state.slimes.filter(
+          s => !group.consumedIds.includes(s.instanceId)
+        );
+
+        // Create result slime
+        const ns = createSlimeInstance(group.resultMasterId, midX, midY);
+        ns.wobbleAmplitude = 0.15;
+        filtered.push(ns);
+
+        // Discover
+        const enc = [...state.encyclopedia];
+        const idx = enc.findIndex(e => e.masterId === group.resultMasterId);
+        if (idx >= 0 && !enc[idx].discovered) {
+          enc[idx] = {
+            ...enc[idx],
+            discovered: true,
+            discoveredAt: Date.now(),
+            mergeCount: enc[idx].mergeCount + 1,
+          };
+        } else if (idx >= 0) {
+          enc[idx] = { ...enc[idx], mergeCount: enc[idx].mergeCount + 1 };
+        }
+
+        const master = SLIME_MASTER[group.resultMasterId];
+        const stats = {
+          ...state.statistics,
+          totalMerges: state.statistics.totalMerges + 1,
+          highestTierReached: Math.max(state.statistics.highestTierReached, master?.tier ?? 0),
+        };
+
+        // Bonus coins
+        const bonusCoins = (master?.coinsPerMinute ?? 1) * group.coinMultiplier;
+
+        if (master && master.tier >= 3) {
+          get().updateMissionProgress('collect_rare', 1);
+        }
+        if (master && master.tier === 6) {
+          get().updateMissionProgress('reach_mythic', 1);
+        }
+
+        set({
+          slimes: filtered,
+          encyclopedia: enc,
+          statistics: stats,
+          coins: state.coins + bonusCoins,
+          flashActive: group.is5Match,
+        });
+
+        get().updateMissionProgress('merge_slimes', 1);
+        get().updateMissionProgress('earn_coins', bonusCoins);
+        get().updateMissionProgress('discover_new', 1);
+        get().checkMilestone();
+
+        return true;
+      },
+
+      checkMilestone: () => {
+        const state = get();
+        const currentRank = state.ranchRank;
+        const enc = state.encyclopedia;
+        const discoveredCount = enc.filter(e => e.discovered).length;
+        const slimes = state.slimes;
+
+        let newRank = currentRank;
+
+        // Rank 1: first merge
+        if (newRank < 1 && state.statistics.totalMerges >= 1) {
+          newRank = 1;
+        }
+        // Rank 2: 5 species discovered
+        if (newRank < 2 && discoveredCount >= 5) {
+          newRank = 2;
+        }
+        // Rank 3: Tier 3 slime owned
+        if (newRank < 3 && slimes.some(s => {
+          const m = SLIME_MASTER[s.masterId];
+          return m && m.tier >= 3;
+        })) {
+          newRank = 3;
+        }
+        // Rank 4: 15 species discovered
+        if (newRank < 4 && discoveredCount >= 15) {
+          newRank = 4;
+        }
+        // Rank 5: Tier 5 slime owned
+        if (newRank < 5 && slimes.some(s => {
+          const m = SLIME_MASTER[s.masterId];
+          return m && m.tier >= 5;
+        })) {
+          newRank = 5;
+        }
+        // Rank 6: all 36 species discovered (excluding special)
+        if (newRank < 6 && discoveredCount >= 36) {
+          newRank = 6;
+        }
+
+        if (newRank > currentRank) {
+          // Apply reward
+          const milestone = MILESTONES.find(m => m.rank === newRank);
+          if (milestone) {
+            if (milestone.rewardType === 'coins') {
+              set(s => ({ coins: s.coins + (milestone.rewardValue as number) }));
+            } else if (milestone.rewardType === 'slot') {
+              // Unlock next locked slot for free
+              const slots = [...state.ranch.slots];
+              const lockedIdx = slots.findIndex(s => s.state === 'locked');
+              if (lockedIdx >= 0) {
+                slots[lockedIdx] = { ...slots[lockedIdx], state: 'unlocked' };
+                const unlockedCount = slots.filter(s => s.state !== 'locked').length;
+                set({
+                  ranch: {
+                    ...state.ranch,
+                    slots,
+                    maxSlimes: unlockedCount * 5,
+                  },
+                });
+              }
+            } else if (milestone.rewardType === 'background') {
+              set({ ranch: { ...state.ranch, backgroundTheme: milestone.rewardValue as any } });
+            } else if (milestone.rewardType === 'booster') {
+              const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+              set(s => ({
+                activeBoosters: [...s.activeBoosters, {
+                  type: 'auto_merge' as const,
+                  multiplier: 1,
+                  expiresAt,
+                }],
+              }));
+            } else if (milestone.rewardType === 'king_slime') {
+              // Add king slime (use green_6 as king placeholder)
+              const kingSlime = createSlimeInstance('green_6', 180, 300);
+              set(s => ({ slimes: [...s.slimes, kingSlime] }));
+            }
+          }
+
+          set({
+            ranchRank: newRank,
+            pendingMilestoneRank: newRank,
+          });
+        }
+      },
+
+      dismissMilestone: () => {
+        set({ pendingMilestoneRank: null });
+      },
+
+      autoSpawnSlime: () => {
+        const state = get();
+        if (state.slimes.length >= state.ranch.maxSlimes) return false;
+
+        const masterId = getRandomTier1MasterId();
+        // Spawn from top of field with random X
+        const x = SPAWN_WALL_LEFT + 30 + Math.random() * (SPAWN_WALL_RIGHT - SPAWN_WALL_LEFT - 60);
+        const y = 100;
+        const ns = createSlimeInstance(masterId, x, y);
+        // Use isNew for entrance animation
+        ns.isNew = true;
+        ns.scale = 0.3;
+
+        // Discover if new
+        const enc = [...state.encyclopedia];
+        const idx = enc.findIndex(e => e.masterId === masterId);
+        if (idx >= 0 && !enc[idx].discovered) {
+          enc[idx] = { ...enc[idx], discovered: true, discoveredAt: Date.now() };
+        }
+
+        set({
+          slimes: [...state.slimes, ns],
+          encyclopedia: enc,
+          lastAutoSpawnTime: Date.now(),
+        });
+
+        return true;
       },
 
       addCoins: (amount: number) => {
@@ -486,8 +692,31 @@ export const useGameStore = create<GameState>()(
         const reward = state.pendingOfflineReward;
         if (!reward) return;
         const amount = doubleIt ? reward.coins * 2 : reward.coins;
+
+        // Spawn offline slimes
+        const newSlimes = [...state.slimes];
+        const enc = [...state.encyclopedia];
+        if (reward.spawnedSlimes) {
+          for (const spawned of reward.spawnedSlimes) {
+            if (newSlimes.length >= state.ranch.maxSlimes) break;
+            const x = SPAWN_WALL_LEFT + 30 + Math.random() * (SPAWN_WALL_RIGHT - SPAWN_WALL_LEFT - 60);
+            const y = 100 + Math.random() * 200;
+            const ns = createSlimeInstance(spawned.masterId, x, y);
+            ns.isNew = true;
+            ns.scale = 0.3;
+            newSlimes.push(ns);
+
+            const idx = enc.findIndex(e => e.masterId === spawned.masterId);
+            if (idx >= 0 && !enc[idx].discovered) {
+              enc[idx] = { ...enc[idx], discovered: true, discoveredAt: Date.now() };
+            }
+          }
+        }
+
         set({
           coins: state.coins + amount,
+          slimes: newSlimes,
+          encyclopedia: enc,
           pendingOfflineReward: null,
           statistics: {
             ...state.statistics,
@@ -640,6 +869,11 @@ export const useGameStore = create<GameState>()(
           pendingOfflineReward: null,
           floatingCoins: [],
           mergeAnimation: null,
+          ranchRank: 0,
+          pendingMilestoneRank: null,
+          lastAutoSpawnTime: Date.now(),
+          comboCounter: 0,
+          flashActive: false,
         });
       },
     }),
@@ -674,6 +908,8 @@ export const useGameStore = create<GameState>()(
         statistics: state.statistics,
         settings: state.settings,
         lastActiveAt: state.lastActiveAt,
+        ranchRank: state.ranchRank,
+        lastAutoSpawnTime: state.lastAutoSpawnTime,
       }),
     }
   )

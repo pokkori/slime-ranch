@@ -1,6 +1,12 @@
 import { SlimeInstanceSave, ActiveBooster } from '../types/storage';
 import { RanchState } from '../types/ranch';
-import { SLIME_MASTER } from '../constants/slimes';
+import { SLIME_MASTER, COLOR_FAMILIES } from '../constants/slimes';
+
+/** Spawned slime during offline */
+export interface OfflineSpawnedSlime {
+  masterId: string;
+  isMutation: boolean;
+}
 
 export interface OfflineRewardResult {
   coins: number;
@@ -11,6 +17,8 @@ export interface OfflineRewardResult {
     decorationBonus: number;
     boosterBonus: number;
   };
+  /** Slimes that spawned while offline */
+  spawnedSlimes: OfflineSpawnedSlime[];
 }
 
 const MAX_OFFLINE_FREE = 14400; // 4 hours
@@ -25,7 +33,7 @@ export function calculateOfflineReward(
 ): OfflineRewardResult {
   const elapsedSeconds = Math.floor((now.getTime() - lastActiveAt.getTime()) / 1000);
   if (elapsedSeconds <= 60) {
-    return { coins: 0, elapsedSeconds: 0, breakdown: { baseCoins: 0, abilityBonus: 0, decorationBonus: 0, boosterBonus: 0 } };
+    return { coins: 0, elapsedSeconds: 0, breakdown: { baseCoins: 0, abilityBonus: 0, decorationBonus: 0, boosterBonus: 0 }, spawnedSlimes: [] };
   }
 
   const cappedSeconds = Math.min(elapsedSeconds, MAX_OFFLINE_FREE);
@@ -87,6 +95,26 @@ export function calculateOfflineReward(
 
   const totalCoins = Math.floor((subtotal + boosterBonus) * OFFLINE_EFFICIENCY);
 
+  // Offline slime spawning: 1-2 per hour, up to maxSlimes
+  const offlineHours = cappedSeconds / 3600;
+  const spawnedSlimes: OfflineSpawnedSlime[] = [];
+  const maxSpawnable = Math.max(0, ranch.maxSlimes - slimes.length);
+
+  if (offlineHours >= 1) {
+    const spawnCount = Math.min(
+      Math.floor(offlineHours * (1 + Math.random())), // 1-2 per hour
+      maxSpawnable,
+    );
+
+    for (let i = 0; i < spawnCount; i++) {
+      // 5% chance of mutation per hour
+      const isMutation = Math.random() < 0.05;
+      const family = COLOR_FAMILIES[Math.floor(Math.random() * COLOR_FAMILIES.length)];
+      const masterId = isMutation ? `${family}_1` : `${family}_1`;
+      spawnedSlimes.push({ masterId, isMutation });
+    }
+  }
+
   return {
     coins: totalCoins,
     elapsedSeconds: cappedSeconds,
@@ -96,5 +124,6 @@ export function calculateOfflineReward(
       decorationBonus: Math.floor(decorationBonus * OFFLINE_EFFICIENCY),
       boosterBonus: Math.floor(boosterBonus * OFFLINE_EFFICIENCY),
     },
+    spawnedSlimes,
   };
 }

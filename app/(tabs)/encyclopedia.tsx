@@ -5,6 +5,7 @@ import { SLIME_MASTER, COLOR_FAMILIES, ALL_SLIMES, TOTAL_SLIME_COUNT } from '../
 import { EncyclopediaCard } from '../../src/components/EncyclopediaCard';
 import { RARITY_COLORS, THEME_COLORS } from '../../src/constants/colors';
 import { SlimeColorFamily, EncyclopediaEntry } from '../../src/types/slime';
+import { generateShareCard, shareCard } from '../../src/utils/share-card';
 
 const COLOR_LABELS: Record<string, { label: string; emoji: string }> = {
   green: { label: '\u8349\u539F', emoji: '\u{1F7E2}' },
@@ -43,7 +44,25 @@ export default function EncyclopediaScreen() {
   const selectedMaster = selectedEntry ? SLIME_MASTER[selectedEntry.masterId] : null;
 
   const handleShare = useCallback(async () => {
-    const message = `\u30B9\u30E9\u30A4\u30E0\u7267\u5834 \u{1F40C} \u30B3\u30EC\u30AF\u30B7\u30E7\u30F3\u7387 ${collectionRate}% (${discoveredCount}/${totalCount}\u7A2E) #\u30B9\u30E9\u30A4\u30E0\u7267\u5834`;
+    const state = useGameStore.getState();
+    const message = `\u30B9\u30E9\u30A4\u30E0\u7267\u5834 \u{1F40C} \u30B3\u30EC\u30AF\u30B7\u30E7\u30F3\u7387 ${collectionRate}% (${discoveredCount}/${totalCount}\u7A2E) #\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0`;
+
+    // Try Canvas OGP card first
+    const dataUrl = await generateShareCard({
+      slimes: state.slimes,
+      backgroundTheme: state.ranch.backgroundTheme,
+      ranchRank: state.ranchRank,
+      discoveredCount,
+      totalCount,
+      highestTierReached: state.statistics.highestTierReached,
+    });
+
+    if (dataUrl) {
+      await shareCard(dataUrl, message);
+      return;
+    }
+
+    // Fallback to text share
     try {
       if (Platform.OS === 'web') {
         if (navigator.share) {
