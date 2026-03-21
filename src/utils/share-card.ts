@@ -16,6 +16,8 @@ interface ShareCardParams {
   discoveredCount: number;
   totalCount: number;
   highestTierReached: number;
+  todayMergeCount?: number;
+  todayCoins?: number;
 }
 
 /**
@@ -26,7 +28,7 @@ export async function generateShareCard(params: ShareCardParams): Promise<string
   if (Platform.OS !== 'web') return null;
   if (typeof document === 'undefined') return null;
 
-  const { slimes, backgroundTheme, ranchRank, discoveredCount, totalCount, highestTierReached } = params;
+  const { slimes, backgroundTheme, ranchRank, discoveredCount, totalCount, highestTierReached, todayMergeCount, todayCoins } = params;
 
   const W = 1200;
   const H = 630;
@@ -116,7 +118,7 @@ export async function generateShareCard(params: ShareCardParams): Promise<string
   // Stats bar at bottom
   ctx.shadowBlur = 0;
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(0, H - 100, W, 100);
+  ctx.fillRect(0, H - 120, W, 120);
 
   ctx.fillStyle = '#FFFFFF';
   ctx.font = 'bold 28px sans-serif';
@@ -124,13 +126,26 @@ export async function generateShareCard(params: ShareCardParams): Promise<string
   ctx.fillText(
     `\u56F3\u9451 ${discoveredCount}/${totalCount}\u7A2E | \u6700\u9AD8Tier: ${highestTierReached} | \u30B9\u30E9\u30A4\u30E0: ${slimes.length}\u4F53`,
     W / 2,
-    H - 55,
+    H - 75,
   );
+
+  // Today's merge count line
+  if (todayMergeCount !== undefined || todayCoins !== undefined) {
+    const mergeCount = todayMergeCount ?? 0;
+    const coinsVal = todayCoins ?? 0;
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(
+      `\u4ECA\u65E5\u306E\u5408\u4F53: ${mergeCount}\u56DE \uD83D\uDCB0 ${coinsVal}`,
+      W / 2,
+      H - 45,
+    );
+  }
 
   // Hashtag
   ctx.font = '22px sans-serif';
-  ctx.fillStyle = '#FFD700';
-  ctx.fillText('#\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0', W / 2, H - 20);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText('#\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0', W / 2, H - 18);
 
   return canvas.toDataURL('image/png');
 }

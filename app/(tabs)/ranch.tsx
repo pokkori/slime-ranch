@@ -7,6 +7,7 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
+  withDelay,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../../src/store/gameStore';
@@ -113,12 +114,34 @@ export default function RanchScreen() {
   const shakeX = useSharedValue(0);
   const shakeY = useSharedValue(0);
 
+  // COMBO popup shared values
+  const comboScale = useSharedValue(0);
+  const comboOpacity = useSharedValue(0);
+
   const canvasShakeStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: shakeX.value },
       { translateY: shakeY.value },
     ],
   }));
+
+  const comboPopupStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: comboScale.value }],
+    opacity: comboOpacity.value,
+  }));
+
+  // COMBO popup animation effect (triggers when comboDisplay level >= 3)
+  useEffect(() => {
+    if (comboDisplay.visible && comboDisplay.level >= 3) {
+      comboScale.value = 0;
+      comboOpacity.value = 1;
+      comboScale.value = withSequence(
+        withSpring(1.4, { damping: 6, stiffness: 200 }),
+        withSpring(1.0, { damping: 8, stiffness: 150 }),
+      );
+      comboOpacity.value = withDelay(800, withTiming(0, { duration: 400 }));
+    }
+  }, [comboDisplay]);
 
   const triggerScreenShake = useCallback(() => {
     shakeX.value = withSequence(
@@ -545,6 +568,8 @@ export default function RanchScreen() {
       discoveredCount,
       totalCount,
       highestTierReached: state.statistics.highestTierReached,
+      todayMergeCount: state.statistics.totalMerges,
+      todayCoins: state.coins,
     });
 
     if (dataUrl) {
@@ -647,10 +672,15 @@ export default function RanchScreen() {
           })()}
 
           {/* Combo counter display */}
-          {comboDisplay.visible && comboDisplay.level > 0 && (
+          {comboDisplay.visible && comboDisplay.level > 0 && comboDisplay.level < 3 && (
             <View style={styles.comboContainer}>
               <Text style={styles.comboText}>COMBO x{comboDisplay.level + 1}!</Text>
             </View>
+          )}
+          {comboDisplay.level >= 3 && (
+            <Animated.View style={[styles.comboContainer, comboPopupStyle]}>
+              <Text style={styles.comboTextBig}>COMBO x{comboDisplay.level + 1}!</Text>
+            </Animated.View>
           )}
 
           {/* Slimes */}
@@ -830,6 +860,14 @@ const styles = StyleSheet.create({
   },
   comboText: {
     fontSize: 36,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+  },
+  comboTextBig: {
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFD700',
     textShadowColor: 'rgba(0,0,0,0.5)',

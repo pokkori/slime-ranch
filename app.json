@@ -3,6 +3,8 @@
     "name": "slime-ranch",
     "slug": "slime-ranch",
     "version": "1.0.0",
+    "description": "スライム牧場 - 可愛いスライムを育てて合体させる放置ゲーム！レアスライムを集めて図鑑を完成させよう。キーワード: スライム育成 放置ゲーム 合体ゲーム マージゲーム 可愛いゲーム",
+    "keywords": ["スライム牧場", "放置ゲーム", "スライム", "合体ゲーム", "マージゲーム"],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

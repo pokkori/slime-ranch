@@ -156,6 +156,26 @@ export default function EncyclopediaScreen() {
                 </Text>
               )}
 
+              {selectedEntry.discoveredAt && (
+                <View style={styles.newDiscoveryBanner}>
+                  <Text style={styles.newDiscoveryText}>{'\uD83C\uDF89'} \u65B0\u7A2E\u767A\u898B\uFF01</Text>
+                  <Pressable
+                    style={styles.discoveryShareBtn}
+                    onPress={async () => {
+                      try {
+                        await Share.share({
+                          message: `\u30B9\u30E9\u30A4\u30E0\u7267\u5834\u3067\u300C${selectedMaster?.name ?? ''}\u300D\u3092\u767A\u898B\uFF01\n#\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u65B0\u7A2E\u767A\u898B`,
+                        });
+                      } catch {
+                        // User cancelled
+                      }
+                    }}
+                  >
+                    <Text style={styles.discoveryShareText}>{'\uD83D\uDCE4'} \u30B7\u30A7\u30A2</Text>
+                  </Pressable>
+                </View>
+              )}
+
               <Pressable style={styles.modalClose} onPress={() => setSelectedEntry(null)}>
                 <Text style={styles.modalCloseText}>\u9589\u3058\u308B</Text>
               </Pressable>
@@ -235,4 +255,22 @@ const styles = StyleSheet.create({
   modalDate: { fontSize: 11, color: THEME_COLORS.textSecondary, marginTop: 4 },
   modalClose: { marginTop: 16, paddingHorizontal: 24, paddingVertical: 8, backgroundColor: THEME_COLORS.primary, borderRadius: 20 },
   modalCloseText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  newDiscoveryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF9C4',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 10,
+    gap: 8,
+  },
+  newDiscoveryText: { fontSize: 13, fontWeight: 'bold', color: '#E65100', flex: 1 },
+  discoveryShareBtn: {
+    backgroundColor: THEME_COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  discoveryShareText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
 });
