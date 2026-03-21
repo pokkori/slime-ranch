@@ -65,6 +65,10 @@ export interface GameState {
   // Settings
   settings: SettingsData;
 
+  // Daily merge counter
+  todayMergeCount: number;
+  lastPlayDate: string;
+
   // Last active
   lastActiveAt: string;
 
@@ -190,9 +194,17 @@ export const useGameStore = create<GameState>()(
       lastAutoSpawnTime: Date.now(),
       comboCounter: 0,
       flashActive: false,
+      todayMergeCount: 0,
+      lastPlayDate: '',
 
       initGame: () => {
         const state = get();
+        // Reset daily merge count if date has changed
+        const today = getTodayString();
+        if (state.lastPlayDate !== today) {
+          set({ todayMergeCount: 0, lastPlayDate: today });
+        }
+
         if (state.slimes.length === 0) {
           // Create initial slimes
           const s1 = createSlimeInstance('green_1', 120, 300);
@@ -298,7 +310,7 @@ export const useGameStore = create<GameState>()(
             }
           }
           const stats = { ...get().statistics, totalMerges: get().statistics.totalMerges + 1 };
-          set({ slimes: filtered, statistics: stats });
+          set({ slimes: filtered, statistics: stats, todayMergeCount: get().todayMergeCount + 1 });
           get().updateMissionProgress('merge_slimes', 1);
         }
 
@@ -353,6 +365,7 @@ export const useGameStore = create<GameState>()(
           mergeAnimation: null,
           encyclopedia: enc,
           statistics: stats,
+          todayMergeCount: get().todayMergeCount + 1,
         });
         get().updateMissionProgress('merge_slimes', 1);
         get().checkMilestone();
@@ -408,6 +421,7 @@ export const useGameStore = create<GameState>()(
           statistics: stats,
           coins: state.coins + bonusCoins,
           flashActive: group.is5Match,
+          todayMergeCount: get().todayMergeCount + 1,
         });
 
         get().updateMissionProgress('merge_slimes', 1);
@@ -910,6 +924,8 @@ export const useGameStore = create<GameState>()(
         lastActiveAt: state.lastActiveAt,
         ranchRank: state.ranchRank,
         lastAutoSpawnTime: state.lastAutoSpawnTime,
+        todayMergeCount: state.todayMergeCount,
+        lastPlayDate: state.lastPlayDate,
       }),
     }
   )

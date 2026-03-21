@@ -568,7 +568,7 @@ export default function RanchScreen() {
       discoveredCount,
       totalCount,
       highestTierReached: state.statistics.highestTierReached,
-      todayMergeCount: state.statistics.totalMerges,
+      todayMergeCount: state.todayMergeCount,
       todayCoins: state.coins,
     });
 
