@@ -221,7 +221,14 @@ export const useGameStore = create<GameState>()(
         if (lastDate === today) {
           // Already logged in today, do nothing
         } else if (lastDate === yesterday) {
-          set({ loginStreak: currentStreak + 1, lastLoginStreakDate: today, streakRewardsClaimed: [] });
+          const newStreak = currentStreak + 1;
+          // 7日サイクル完了時（8,15,22...日目に達した時）のみリセット
+          const shouldResetClaimed = (newStreak - 1) % 7 === 0;
+          set({
+            loginStreak: newStreak,
+            lastLoginStreakDate: today,
+            ...(shouldResetClaimed ? { streakRewardsClaimed: [] } : {}),
+          });
         } else {
           set({ loginStreak: 1, lastLoginStreakDate: today, streakRewardsClaimed: [] });
         }
