@@ -69,6 +69,11 @@ export interface GameState {
   todayMergeCount: number;
   lastPlayDate: string;
 
+  // Login streak
+  loginStreak: number;
+  lastLoginStreakDate: string;
+  streakRewardsClaimed: number[];
+
   // Last active
   lastActiveAt: string;
 
@@ -131,6 +136,7 @@ export interface GameState {
   updateSettings: (partial: Partial<SettingsData>) => void;
   clearFloatingCoin: (id: string) => void;
   resetGame: () => void;
+  recoverStreak: () => boolean;
 }
 
 const initialEncyclopedia = (): EncyclopediaEntry[] =>
@@ -196,6 +202,9 @@ export const useGameStore = create<GameState>()(
       flashActive: false,
       todayMergeCount: 0,
       lastPlayDate: '',
+      loginStreak: 0,
+      lastLoginStreakDate: '',
+      streakRewardsClaimed: [],
 
       initGame: () => {
         const state = get();
@@ -203,6 +212,18 @@ export const useGameStore = create<GameState>()(
         const today = getTodayString();
         if (state.lastPlayDate !== today) {
           set({ todayMergeCount: 0, lastPlayDate: today });
+        }
+
+        // Login streak update
+        const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split("T")[0]; })();
+        const currentStreak = get().loginStreak ?? 0;
+        const lastDate = get().lastLoginStreakDate ?? '';
+        if (lastDate === today) {
+          // Already logged in today, do nothing
+        } else if (lastDate === yesterday) {
+          set({ loginStreak: currentStreak + 1, lastLoginStreakDate: today, streakRewardsClaimed: [] });
+        } else {
+          set({ loginStreak: 1, lastLoginStreakDate: today, streakRewardsClaimed: [] });
         }
 
         if (state.slimes.length === 0) {
@@ -888,7 +909,23 @@ export const useGameStore = create<GameState>()(
           lastAutoSpawnTime: Date.now(),
           comboCounter: 0,
           flashActive: false,
+          loginStreak: 0,
+          lastLoginStreakDate: '',
+          streakRewardsClaimed: [],
         });
+      },
+
+      recoverStreak: () => {
+        const state = get();
+        if ((state.gems ?? 0) < 2) return false;
+        const today = new Date().toISOString().split("T")[0];
+        set({
+          gems: (state.gems ?? 0) - 2,
+          loginStreak: state.loginStreak + 1,
+          lastLoginStreakDate: today,
+          streakRewardsClaimed: [],
+        });
+        return true;
       },
     }),
     {
@@ -926,6 +963,9 @@ export const useGameStore = create<GameState>()(
         lastAutoSpawnTime: state.lastAutoSpawnTime,
         todayMergeCount: state.todayMergeCount,
         lastPlayDate: state.lastPlayDate,
+        loginStreak: state.loginStreak,
+        lastLoginStreakDate: state.lastLoginStreakDate,
+        streakRewardsClaimed: state.streakRewardsClaimed,
       }),
     }
   )

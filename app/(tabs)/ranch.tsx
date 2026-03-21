@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { View, StyleSheet, Dimensions, Text, Platform, Pressable } from 'react-native';
+import { View, StyleSheet, Dimensions, Text, Platform, Pressable, Share } from 'react-native';
+import ViewShot, { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -30,6 +32,7 @@ import {
   startBGM, stopBGM, setBgmVolume, playComboSound,
 } from '../../src/utils/sound';
 import { generateShareCard, shareCard } from '../../src/utils/share-card';
+import { StreakCalendar } from '../../src/components/StreakCalendar';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GROUND_Y = SCREEN_HEIGHT - 180;
@@ -88,6 +91,13 @@ export default function RanchScreen() {
   const [showMissionComplete, setShowMissionComplete] = useState(false);
   const prevAllClaimedRef = useRef(false);
 
+  const loginStreak = useGameStore(s => s.loginStreak);
+  const streakRewardsClaimed = useGameStore(s => s.streakRewardsClaimed ?? []);
+
+  const canvasRef = useRef<any>(null);
+  const [showStreakCalendar, setShowStreakCalendar] = useState(false);
+  const [showShareBanner, setShowShareBanner] = useState(false);
+
   const [selectedSlime, setSelectedSlime] = useState<SlimeInstance | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
   const [comboDisplay, setComboDisplay] = useState<{ level: number; visible: boolean }>({ level: 0, visible: false });
@@ -112,6 +122,16 @@ export default function RanchScreen() {
     }
     prevAllClaimedRef.current = allMissionBonusClaimed;
   }, [allMissionBonusClaimed]);
+
+  // StreakCalendar: show on login if today's reward not yet claimed
+  useEffect(() => {
+    const dayInCycle = ((loginStreak - 1) % 7) + 1;
+    const todayClaimed = (streakRewardsClaimed ?? []).includes(dayInCycle);
+    if (loginStreak > 0 && !todayClaimed) {
+      const timer = setTimeout(() => setShowStreakCalendar(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [loginStreak]);
 
   // Flash effect for 5-match
   useEffect(() => {
@@ -349,6 +369,11 @@ export default function RanchScreen() {
         // Show combo display for 3-match
         setComboDisplay({ level: 1, visible: true });
         setTimeout(() => setComboDisplay(prev => ({ ...prev, visible: false })), 1000);
+
+        if (resultTier >= 5) {
+          setShowShareBanner(true);
+          setTimeout(() => setShowShareBanner(false), 3000);
+        }
 
         triggerMergeHaptic(resultTier);
         if (settings.sfxEnabled) {
@@ -598,13 +623,35 @@ export default function RanchScreen() {
     if (slime) setSelectedSlime(slime);
   }, []);
 
-  // Share card handler (R7: todayMergeCount 型安全化)
+  // Share card handler (R11: ViewShot ネイティブ画像シェア)
   const handleShareCard = useCallback(async () => {
     const state = useGameStore.getState();
+    const text = `スライム牧場 🐌 ランク${state.ranchRank} | 今日の合体: ${state.todayMergeCount ?? 0}回 #スライム牧場 #放置ゲーム`;
+
+    if (Platform.OS !== 'web') {
+      try {
+        if (canvasRef.current) {
+          const uri = await captureRef(canvasRef, { format: 'png', quality: 0.9 });
+          const isAvail = await Sharing.isAvailableAsync();
+          if (isAvail) {
+            await Sharing.shareAsync(uri, {
+              mimeType: 'image/png',
+              dialogTitle: 'スライム牧場をシェア',
+              UTI: 'public.png',
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('ViewShot failed, fallback to text share', e);
+      }
+      await Share.share({ message: text });
+      return;
+    }
+    // Web側は既存Canvas処理を維持
     const discoveredCount = state.encyclopedia.filter(e => e.discovered).length;
     const totalCount = state.encyclopedia.length;
     const todayMergeCount = state.todayMergeCount ?? 0;
-
     const dataUrl = await generateShareCard({
       slimes: state.slimes,
       backgroundTheme: state.ranch.backgroundTheme,
@@ -615,14 +662,7 @@ export default function RanchScreen() {
       todayMergeCount,
       todayCoins: state.coins,
     });
-
-    const mergeText = todayMergeCount > 0 ? ` 今日の合体: ${todayMergeCount}回` : '';
-    const text = `スライム牧場 🐌 ランク${state.ranchRank} | 図鑑 ${discoveredCount}/${totalCount}種${mergeText} #スライム牧場 #放置ゲーム`;
-
-    if (Platform.OS !== 'web') {
-      // ネイティブ: generateShareCardはnullを返すが、shareCardはnullでも対応
-      await shareCard(dataUrl ?? '', text);
-    } else if (dataUrl) {
+    if (dataUrl) {
       await shareCard(dataUrl, text);
     }
   }, []);
@@ -679,12 +719,6 @@ export default function RanchScreen() {
             <CoinDisplay />
           </View>
         </View>
-        {todayMergeCount > 0 && (
-          <Animated.View style={[useAnimatedStyle(() => ({ transform: [{ scale: mergeCountScale.value }] })), styles.mergeCountBadge]}>
-            <Text style={styles.mergeCountText}>{`\u2728\u4ECA\u65E5\u306E\u5408\u4F53: ${todayMergeCount}\u56DE`}</Text>
-          </Animated.View>
-        )}
-
         {/* Rank progress bar */}
         {nextMilestone && (
           <View style={styles.rankProgressContainer}>
@@ -698,6 +732,7 @@ export default function RanchScreen() {
         )}
 
         {/* Ranch canvas with screen shake support */}
+        <ViewShot ref={canvasRef} options={{ format: 'png', quality: 0.9 }} style={{ flex: 1 }}>
         <Animated.View style={[styles.canvas, { backgroundColor: bgColors.bottom }, canvasShakeStyle]}>
           {/* 5-match flash overlay */}
           {flash && <View style={styles.flashOverlay} />}
@@ -775,6 +810,7 @@ export default function RanchScreen() {
             />
           )}
         </Animated.View>
+        </ViewShot>
 
         {/* Status bar */}
         <View style={styles.statusBar}>
@@ -813,6 +849,27 @@ export default function RanchScreen() {
           visible={!!selectedSlime}
           onClose={() => setSelectedSlime(null)}
         />
+
+        {/* Tier5/6 share banner */}
+        {showShareBanner && (
+          <Pressable
+            style={{
+              position: 'absolute', bottom: 60, left: 20, right: 20,
+              backgroundColor: '#FF6B6B', borderRadius: 12, padding: 12,
+              alignItems: 'center', zIndex: 100,
+            }}
+            onPress={() => { handleShareCard(); setShowShareBanner(false); }}
+          >
+            <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>
+              🎉 レアスライム誕生！シェアする →
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Login streak calendar */}
+        {showStreakCalendar && (
+          <StreakCalendar onClose={() => setShowStreakCalendar(false)} />
+        )}
       </SafeAreaView>
   );
 }
