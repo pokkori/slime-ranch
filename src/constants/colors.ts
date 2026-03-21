@@ -1,0 +1,46 @@
+export const THEME_COLORS = {
+  primary: '#4CAF50',
+  secondary: '#81C784',
+  background: '#F1F8E9',
+  surface: '#FFFFFF',
+  text: '#212121',
+  textSecondary: '#757575',
+  accent: '#FF9800',
+  error: '#F44336',
+  coin: '#FFD700',
+  gem: '#7C4DFF',
+  tabBar: '#FFFFFF',
+  tabBarActive: '#4CAF50',
+  tabBarInactive: '#BDBDBD',
+  headerBg: '#4CAF50',
+  headerText: '#FFFFFF',
+  cardBg: '#FFFFFF',
+  cardBorder: '#E0E0E0',
+  progressBar: '#4CAF50',
+  progressBarBg: '#E0E0E0',
+  overlay: 'rgba(0,0,0,0.5)',
+  rarityCommon: '#9E9E9E',
+  rarityUncommon: '#4CAF50',
+  rarityRare: '#2196F3',
+  rarityEpic: '#9C27B0',
+  rarityLegendary: '#FF9800',
+  rarityMythic: '#F44336',
+} as const;
+
+export const RARITY_COLORS: Record<string, string> = {
+  common: THEME_COLORS.rarityCommon,
+  uncommon: THEME_COLORS.rarityUncommon,
+  rare: THEME_COLORS.rarityRare,
+  epic: THEME_COLORS.rarityEpic,
+  legendary: THEME_COLORS.rarityLegendary,
+  mythic: THEME_COLORS.rarityMythic,
+};
+
+export const BACKGROUND_COLORS: Record<string, { top: string; bottom: string; ground: string }> = {
+  meadow: { top: '#87CEEB', bottom: '#E8F5E9', ground: '#4CAF50' },
+  forest: { top: '#2E7D32', bottom: '#1B5E20', ground: '#33691E' },
+  beach: { top: '#4FC3F7', bottom: '#FFF9C4', ground: '#FFD54F' },
+  volcano: { top: '#BF360C', bottom: '#FF6E40', ground: '#D84315' },
+  sky_garden: { top: '#B3E5FC', bottom: '#E1BEE7', ground: '#CE93D8' },
+  crystal_cave: { top: '#1A237E', bottom: '#311B92', ground: '#4527A0' },
+};
