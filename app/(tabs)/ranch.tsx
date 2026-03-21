@@ -60,6 +60,7 @@ export default function RanchScreen() {
   const comboCounter = useGameStore(s => s.comboCounter);
   const flashActive = useGameStore(s => s.flashActive);
   const encyclopedia = useGameStore(s => s.encyclopedia);
+  const todayMergeCount = useGameStore(s => s.todayMergeCount);
 
   // Sync SE volume from settings on mount / change
   useEffect(() => {
@@ -173,6 +174,17 @@ export default function RanchScreen() {
       comboOpacity.value = withDelay(800, withTiming(0, { duration: 400 }));
     }
   }, [comboDisplay]);
+
+  // todayMergeCount badge spring animation (R10)
+  const mergeCountScale = useSharedValue(1);
+  useEffect(() => {
+    if (todayMergeCount > 0) {
+      mergeCountScale.value = withSequence(
+        withSpring(1.4, { damping: 4, stiffness: 300 }),
+        withSpring(1.0, { damping: 10, stiffness: 200 }),
+      );
+    }
+  }, [todayMergeCount]);
 
   const triggerScreenShake = useCallback(() => {
     shakeX.value = withSequence(
@@ -604,9 +616,13 @@ export default function RanchScreen() {
       todayCoins: state.coins,
     });
 
-    if (dataUrl) {
-      const mergeText = todayMergeCount > 0 ? ` 今日の合体: ${todayMergeCount}回` : '';
-      const text = `スライム牧場 🐌 ランク${state.ranchRank} | 図鑑 ${discoveredCount}/${totalCount}種${mergeText} #スライム牧場 #放置ゲーム`;
+    const mergeText = todayMergeCount > 0 ? ` 今日の合体: ${todayMergeCount}回` : '';
+    const text = `スライム牧場 🐌 ランク${state.ranchRank} | 図鑑 ${discoveredCount}/${totalCount}種${mergeText} #スライム牧場 #放置ゲーム`;
+
+    if (Platform.OS !== 'web') {
+      // ネイティブ: generateShareCardはnullを返すが、shareCardはnullでも対応
+      await shareCard(dataUrl ?? '', text);
+    } else if (dataUrl) {
       await shareCard(dataUrl, text);
     }
   }, []);
@@ -639,7 +655,6 @@ export default function RanchScreen() {
 
   const rankEmojis = ['\u2B50', '\u{1F331}', '\u{1F33F}', '\u{1F333}', '\u2728', '\u{1F451}', '\u{1F308}'];
   const rankEmoji = rankEmojis[ranchRank] || '\u2B50';
-  const todayMergeCount = useGameStore(s => s.todayMergeCount);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bgColors.top }]}>
@@ -664,6 +679,11 @@ export default function RanchScreen() {
             <CoinDisplay />
           </View>
         </View>
+        {todayMergeCount > 0 && (
+          <Animated.View style={[useAnimatedStyle(() => ({ transform: [{ scale: mergeCountScale.value }] })), styles.mergeCountBadge]}>
+            <Text style={styles.mergeCountText}>{`\u2728\u4ECA\u65E5\u306E\u5408\u4F53: ${todayMergeCount}\u56DE`}</Text>
+          </Animated.View>
+        )}
 
         {/* Rank progress bar */}
         {nextMilestone && (
@@ -836,6 +856,21 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontSize: 11,
     marginTop: 1,
+  },
+  mergeCountBadge: {
+    backgroundColor: 'rgba(255,215,0,0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.5)',
+    alignSelf: 'center',
+    marginBottom: 2,
+  },
+  mergeCountText: {
+    color: '#FFD700',
+    fontSize: 13,
+    fontWeight: '700',
   },
   shareBtn: {
     width: 32,

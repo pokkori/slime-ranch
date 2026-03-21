@@ -3,6 +3,8 @@
  * Generates a 1200x630 image with ranch info for social sharing.
  */
 import { Platform, Share } from 'react-native';
+import { File as FSFile, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { SLIME_MASTER } from '../constants/slimes';
 import { BACKGROUND_COLORS } from '../constants/colors';
 import { MILESTONES } from '../constants/milestones';
@@ -181,11 +183,43 @@ export async function generateShareCard(params: ShareCardParams): Promise<string
  */
 export async function shareCard(dataUrl: string, text: string): Promise<void> {
   if (Platform.OS !== 'web') {
-    // ネイティブ: RN Share.share テキストのみ
-    await Share.share({ message: text });
+    // ネイティブ: expo-file-system で dataUrl → 一時ファイル → expo-sharing
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable && dataUrl) {
+        // dataUrl形式: "data:image/png;base64,..."
+        const base64 = dataUrl.split(',')[1];
+        if (base64) {
+          // expo-file-system v55 新API: File クラスを使用
+          const cacheFile = new FSFile(Paths.cache, 'slime-ranch-share.png');
+          // base64をUint8Arrayに変換してバイナリ書き込み
+          const binaryStr = atob(base64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          cacheFile.write(bytes);
+          await Sharing.shareAsync(cacheFile.uri, {
+            mimeType: 'image/png',
+            dialogTitle: text,
+            UTI: 'public.png',
+          });
+          return;
+        }
+      }
+    } catch {
+      // expo-file-system失敗時はテキストのみフォールバック
+    }
+    // フォールバック: テキストのみ
+    try {
+      await Share.share({ message: text });
+    } catch {
+      // ignore
+    }
     return;
   }
-  // Web: Canvas dataUrl → Blob → File → navigator.share
+
+  // Web: Canvas dataUrl → Blob → File → navigator.share（既存ロジック保持）
   try {
     const response = await fetch(dataUrl);
     const blob = await response.blob();
