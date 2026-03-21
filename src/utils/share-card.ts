@@ -115,6 +115,32 @@ export async function generateShareCard(params: ShareCardParams): Promise<string
   ctx.font = 'bold 32px sans-serif';
   ctx.fillText(`\u30E9\u30F3\u30AF${ranchRank}: ${rankName}`, W / 2, 110);
 
+  // Top5 slimes bubble visualization (R8)
+  const top5 = slimes
+    .slice()
+    .sort((a, b) => (SLIME_MASTER[b.masterId]?.tier ?? 0) - (SLIME_MASTER[a.masterId]?.tier ?? 0))
+    .slice(0, 5);
+
+  top5.forEach((slime, i) => {
+    const master = SLIME_MASTER[slime.masterId];
+    if (!master) return;
+    const cx = 880 + (i % 3) * 120;
+    const cy = 200 + Math.floor(i / 3) * 120;
+    const r = 40 + master.tier * 4;
+    const grad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
+    grad.addColorStop(0, master.highlightColor);
+    grad.addColorStop(1, master.baseColor);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Tier label
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${14 + master.tier}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`Tier${master.tier}`, cx, cy + 5);
+  });
+
   // Stats bar at bottom
   ctx.shadowBlur = 0;
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -129,23 +155,23 @@ export async function generateShareCard(params: ShareCardParams): Promise<string
     H - 75,
   );
 
-  // Today's merge count line
-  if (todayMergeCount !== undefined || todayCoins !== undefined) {
-    const mergeCount = todayMergeCount ?? 0;
-    const coinsVal = todayCoins ?? 0;
-    ctx.font = 'bold 24px sans-serif';
+  // Today's merge count badge (R8)
+  if (todayMergeCount !== undefined && todayMergeCount > 0) {
+    ctx.fillStyle = 'rgba(255,215,0,0.2)';
+    ctx.beginPath();
+    (ctx as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(40, H - 120, 320, 65, 10);
+    ctx.fill();
     ctx.fillStyle = '#FFD700';
-    ctx.fillText(
-      `\u4ECA\u65E5\u306E\u5408\u4F53: ${mergeCount}\u56DE \uD83D\uDCB0 ${coinsVal}`,
-      W / 2,
-      H - 45,
-    );
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`\u2728 \u4ECA\u65E5\u306E\u5408\u4F53: ${todayMergeCount}\u56DE`, 60, H - 77);
   }
 
-  // Hashtag
-  ctx.font = '22px sans-serif';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('#\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0', W / 2, H - 18);
+  // Hashtag強化 (R8)
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = '24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('#\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0 #\u30B9\u30E9\u30A4\u30E0 #\u5408\u4F53', W / 2, H - 30);
 
   return canvas.toDataURL('image/png');
 }

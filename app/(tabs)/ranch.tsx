@@ -132,6 +132,9 @@ export default function RanchScreen() {
   const comboScale = useSharedValue(0);
   const comboOpacity = useSharedValue(0);
 
+  // Rank scale animation for rank-up (R8)
+  const rankScaleAnim = useSharedValue(1);
+
   const canvasShakeStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: shakeX.value },
@@ -143,6 +146,20 @@ export default function RanchScreen() {
     transform: [{ scale: comboScale.value }],
     opacity: comboOpacity.value,
   }));
+
+  const rankAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: rankScaleAnim.value }],
+  }));
+
+  // Rank-up scale animation (R8)
+  useEffect(() => {
+    if (pendingMilestoneRank && pendingMilestoneRank > 0) {
+      rankScaleAnim.value = withSequence(
+        withTiming(1.4, { duration: 200 }),
+        withSpring(1, { damping: 10, stiffness: 200 }),
+      );
+    }
+  }, [pendingMilestoneRank]);
 
   // COMBO popup animation effect (triggers when comboDisplay level >= 3)
   useEffect(() => {
@@ -628,7 +645,9 @@ export default function RanchScreen() {
         {/* Header with rank badge and share button */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.rankBadge}>{rankEmoji}</Text>
+            <Animated.Text style={[styles.rankBadge, rankAnimStyle]}>
+              {`\u30E9\u30F3\u30AF ${ranchRank} ${ranchRank >= 10 ? '\u2B50' : ranchRank >= 5 ? '\u{1F31F}' : ''}`}
+            </Animated.Text>
             <View>
               <Text style={styles.title}>{'\u30B9\u30E9\u30A4\u30E0\u7267\u5834'}</Text>
               {currentMilestone && (
