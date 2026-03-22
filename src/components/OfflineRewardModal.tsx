@@ -13,15 +13,32 @@ import { formatNumber, formatTime } from '../utils/format';
 import { THEME_COLORS } from '../constants/colors';
 import { SLIME_MASTER } from '../constants/slimes';
 import { playOfflineRewardSound } from '../utils/sound';
+import { showRewardedAd } from '../utils/admob';
 
 export const OfflineRewardModal: React.FC = () => {
   const reward = useGameStore(s => s.pendingOfflineReward);
   const dismiss = useGameStore(s => s.dismissOfflineReward);
+  const updateMissionProgress = useGameStore(s => s.updateMissionProgress);
   const sfxEnabled = useGameStore(s => s.settings.sfxEnabled);
 
   const handleDismiss = (doubleIt: boolean) => {
     if (sfxEnabled) playOfflineRewardSound();
     dismiss(doubleIt);
+  };
+
+  const handleWatchAd = () => {
+    showRewardedAd(
+      () => {
+        // 視聴完了: 2倍付与 + ミッション進捗
+        if (sfxEnabled) playOfflineRewardSound();
+        updateMissionProgress('watch_ad', 1);
+        dismiss(true);
+      },
+      () => {
+        // 失敗時: 通常付与
+        dismiss(false);
+      }
+    );
   };
 
   if (!reward || reward.coins <= 0) return null;
@@ -70,7 +87,7 @@ export const OfflineRewardModal: React.FC = () => {
           {/* Prominent ad button with glow effect */}
           <View style={styles.doubleButtonContainer}>
             <View style={styles.doubleGlow} />
-            <Pressable style={styles.doubleButton} onPress={() => handleDismiss(true)}>
+            <Pressable style={styles.doubleButton} onPress={handleWatchAd}>
               <Text style={styles.doubleEmoji}>{'\u{1F3AC}'}</Text>
               <View style={styles.doubleTextContainer}>
                 <Text style={styles.doubleTitle}>{'\u5E83\u544A\u3092\u898B\u30662\u500D\uFF01'}</Text>

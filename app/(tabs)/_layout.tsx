@@ -1,5 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { View, Text } from 'react-native';
+import { useGameStore } from '../../src/store/gameStore';
 import { THEME_COLORS } from '../../src/constants/colors';
 
 export default function TabLayout() {
@@ -53,9 +55,30 @@ export default function TabLayout() {
         name="missions"
         options={{
           title: 'ミッション',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => {
+            const dailyMissions = useGameStore(s => s.dailyMissions);
+            const unclaimedCount = dailyMissions?.filter(m => m.completed && !m.claimed).length ?? 0;
+            return (
+              <View>
+                <Ionicons name="list" size={size} color={color} />
+                {unclaimedCount > 0 && (
+                  <View style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -8,
+                    backgroundColor: '#FF3B30',
+                    borderRadius: 8,
+                    minWidth: 16,
+                    height: 16,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{unclaimedCount}</Text>
+                  </View>
+                )}
+              </View>
+            );
+          },
         }}
       />
       <Tabs.Screen

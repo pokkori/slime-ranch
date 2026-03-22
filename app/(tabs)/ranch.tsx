@@ -32,6 +32,7 @@ import {
   startBGM, stopBGM, setBgmVolume, playComboSound,
 } from '../../src/utils/sound';
 import { generateShareCard, shareCard } from '../../src/utils/share-card';
+import { showRewardedAd } from '../../src/utils/admob';
 import { StreakCalendar } from '../../src/components/StreakCalendar';
 import { NativeShareCard, captureAndShareNativeCard } from '../../src/components/NativeShareCard';
 import { WeeklyChallengeModal } from '../../src/components/WeeklyChallengeModal';
@@ -720,6 +721,22 @@ export default function RanchScreen() {
             </View>
           </View>
           <View style={styles.headerRight}>
+            <Pressable
+              style={styles.adBonusBtn}
+              onPress={() => {
+                const { coins, addCoins, updateMissionProgress } = useGameStore.getState();
+                showRewardedAd(
+                  () => {
+                    const bonusCoins = Math.max(100, Math.floor(coins * 0.1));
+                    addCoins(bonusCoins);
+                    updateMissionProgress('watch_ad', 1);
+                  },
+                  () => {}
+                );
+              }}
+            >
+              <Text style={styles.adBonusBtnText}>{'\u{1F3AC}'}</Text>
+            </Pressable>
             <Pressable style={styles.shareBtn} onPress={handleShareCard}>
               <Text style={styles.shareBtnText}>{'\u{1F4F7}'}</Text>
             </Pressable>
@@ -956,6 +973,20 @@ const styles = StyleSheet.create({
     color: '#FFD700',
     fontSize: 13,
     fontWeight: '700',
+  },
+  adBonusBtn: {
+    backgroundColor: '#FF9800',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  adBonusBtnText: {
+    fontSize: 16,
   },
   shareBtn: {
     width: 32,

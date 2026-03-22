@@ -43,7 +43,9 @@ export const NativeShareCard = React.forwardRef<View, NativeShareCardProps>((pro
           <View
             key={i}
             style={[styles.slimeDot, { backgroundColor: s.color ?? '#4CAF50' }]}
-          />
+          >
+            <Text style={styles.slimeFace}>👀</Text>
+          </View>
         ))}
       </View>
       <View style={styles.statsRow}>
@@ -106,11 +108,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   slimeDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  slimeFace: {
+    fontSize: 12,
   },
   statsRow: {
     flexDirection: 'row',

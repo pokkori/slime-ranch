@@ -950,11 +950,11 @@ export const useGameStore = create<GameState>()(
         const state = get();
         if ((state.gems ?? 0) < 2) return false;
         const today = new Date().toISOString().split("T")[0];
+        // streakRewardsClaimedはリセットしない（回復後に既受取報酬を再取得させない）
         set({
           gems: (state.gems ?? 0) - 2,
           loginStreak: state.loginStreak + 1,
           lastLoginStreakDate: today,
-          streakRewardsClaimed: [],
         });
         return true;
       },
