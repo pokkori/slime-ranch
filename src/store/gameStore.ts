@@ -14,6 +14,7 @@ import { canMerge, getMergeResult, getRandomTier1MasterId, findMergeGroup, Merge
 import { calculateOfflineReward, OfflineRewardResult } from '../engine/offline-reward';
 import { MILESTONES } from '../constants/milestones';
 import { getTodayString } from '../utils/format';
+import { getCurrentWeeklyChallenge } from '../constants/weekly-challenge';
 
 const SPAWN_WALL_LEFT = 10;
 const SPAWN_WALL_RIGHT = 370; // approximate screen width - 10
@@ -79,6 +80,18 @@ export interface GameState {
 
   // Offline reward pending
   pendingOfflineReward: OfflineRewardResult | null;
+
+  // Weekly challenge
+  weeklyChallenge: {
+    weekId: string;
+    mergesThisWeek: number;
+    discoversThisWeek: number;
+    coinsThisWeek: number;
+    claimed: boolean;
+  } | null;
+
+  // Shop purchased items (persistent)
+  shopPurchasedItems: string[];
 
   // Floating coins for animation
   floatingCoins: Array<{ x: number; y: number; value: number; id: string }>;
@@ -205,6 +218,8 @@ export const useGameStore = create<GameState>()(
       loginStreak: 0,
       lastLoginStreakDate: '',
       streakRewardsClaimed: [],
+      weeklyChallenge: null,
+      shopPurchasedItems: [],
 
       initGame: () => {
         const state = get();
@@ -253,6 +268,13 @@ export const useGameStore = create<GameState>()(
         // Check daily missions
         get().refreshDailyMissions();
         get().checkOfflineReward();
+
+        // Weekly challenge initialization
+        const challenge = getCurrentWeeklyChallenge();
+        const wc = get().weeklyChallenge;
+        if (!wc || wc.weekId !== challenge.weekId) {
+          set({ weeklyChallenge: { weekId: challenge.weekId, mergesThisWeek: 0, discoversThisWeek: 0, coinsThisWeek: 0, claimed: false } });
+        }
       },
 
       tapSlime: (instanceId: string) => {
@@ -919,6 +941,8 @@ export const useGameStore = create<GameState>()(
           loginStreak: 0,
           lastLoginStreakDate: '',
           streakRewardsClaimed: [],
+          weeklyChallenge: null,
+          shopPurchasedItems: [],
         });
       },
 
@@ -973,6 +997,8 @@ export const useGameStore = create<GameState>()(
         loginStreak: state.loginStreak,
         lastLoginStreakDate: state.lastLoginStreakDate,
         streakRewardsClaimed: state.streakRewardsClaimed,
+        weeklyChallenge: state.weeklyChallenge,
+        shopPurchasedItems: state.shopPurchasedItems,
       }),
     }
   )

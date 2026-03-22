@@ -33,6 +33,9 @@ import {
 } from '../../src/utils/sound';
 import { generateShareCard, shareCard } from '../../src/utils/share-card';
 import { StreakCalendar } from '../../src/components/StreakCalendar';
+import { NativeShareCard, captureAndShareNativeCard } from '../../src/components/NativeShareCard';
+import { WeeklyChallengeModal } from '../../src/components/WeeklyChallengeModal';
+import { getCurrentWeeklyChallenge } from '../../src/constants/weekly-challenge';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GROUND_Y = SCREEN_HEIGHT - 180;
@@ -95,8 +98,11 @@ export default function RanchScreen() {
   const streakRewardsClaimed = useGameStore(s => s.streakRewardsClaimed ?? []);
 
   const canvasRef = useRef<any>(null);
+  const nativeShareCardRef = React.useRef<View>(null);
+  const [showNativeShareCard, setShowNativeShareCard] = useState(false);
   const [showStreakCalendar, setShowStreakCalendar] = useState(false);
   const [showShareBanner, setShowShareBanner] = useState(false);
+  const [showWeeklyChallenge, setShowWeeklyChallenge] = useState(false);
 
   const [selectedSlime, setSelectedSlime] = useState<SlimeInstance | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
@@ -132,6 +138,16 @@ export default function RanchScreen() {
       return () => clearTimeout(timer);
     }
   }, [loginStreak]);
+
+  // Weekly challenge: show on app start if new week
+  useEffect(() => {
+    const challenge = getCurrentWeeklyChallenge();
+    const wc = useGameStore.getState().weeklyChallenge;
+    if (!wc || wc.weekId !== challenge.weekId) {
+      const timer = setTimeout(() => setShowWeeklyChallenge(true), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   // Flash effect for 5-match
   useEffect(() => {
@@ -629,23 +645,14 @@ export default function RanchScreen() {
     const text = `スライム牧場 🐌 ランク${state.ranchRank} | 今日の合体: ${state.todayMergeCount ?? 0}回 #スライム牧場 #放置ゲーム`;
 
     if (Platform.OS !== 'web') {
-      try {
-        if (canvasRef.current) {
-          const uri = await captureRef(canvasRef, { format: 'png', quality: 0.9 });
-          const isAvail = await Sharing.isAvailableAsync();
-          if (isAvail) {
-            await Sharing.shareAsync(uri, {
-              mimeType: 'image/png',
-              dialogTitle: 'スライム牧場をシェア',
-              UTI: 'public.png',
-            });
-            return;
-          }
-        }
-      } catch (e) {
-        console.log('ViewShot failed, fallback to text share', e);
+      setShowNativeShareCard(true);
+      // 少し待ってからキャプチャ
+      await new Promise(r => setTimeout(r, 150));
+      const success = await captureAndShareNativeCard(nativeShareCardRef, text);
+      setShowNativeShareCard(false);
+      if (!success) {
+        await Share.share({ message: text });
       }
-      await Share.share({ message: text });
       return;
     }
     // Web側は既存Canvas処理を維持
@@ -869,6 +876,27 @@ export default function RanchScreen() {
         {/* Login streak calendar */}
         {showStreakCalendar && (
           <StreakCalendar onClose={() => setShowStreakCalendar(false)} />
+        )}
+
+        {/* Weekly challenge modal */}
+        {showWeeklyChallenge && (
+          <WeeklyChallengeModal visible onClose={() => setShowWeeklyChallenge(false)} />
+        )}
+
+        {/* Native OGP Share Card (off-screen) */}
+        {showNativeShareCard && (
+          <View style={{ position: 'absolute', left: -9999, top: -9999, width: 320, height: 168 }}>
+            <NativeShareCard
+              ref={nativeShareCardRef}
+              slimes={slimes}
+              backgroundTheme={ranch.backgroundTheme}
+              ranchRank={ranchRank}
+              discoveredCount={encyclopedia.filter((e: any) => e.discovered).length}
+              totalCount={encyclopedia.length}
+              highestTierReached={useGameStore.getState().statistics.highestTierReached}
+              todayMergeCount={todayMergeCount}
+            />
+          </View>
         )}
       </SafeAreaView>
   );

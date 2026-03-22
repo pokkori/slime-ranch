@@ -28,8 +28,9 @@ export default function ShopScreen() {
   const unlockSlot = useGameStore(s => s.unlockSlot);
   const sfxEnabled = useGameStore(s => s.settings.sfxEnabled);
 
-  // Track purchased items locally (in a real app this would be persisted)
-  const [purchasedItems, setPurchasedItems] = useState<Set<string>>(new Set());
+  // Track purchased items persistently via gameStore
+  const shopPurchasedItemsArr = useGameStore(s => s.shopPurchasedItems ?? []);
+  const purchasedItems = new Set<string>(shopPurchasedItemsArr);
 
   const filteredItems = useMemo(() =>
     SHOP_ITEMS.filter(item => item.category === category),
@@ -89,7 +90,7 @@ export default function ShopScreen() {
     if (sfxEnabled) playPurchaseSound();
 
     if (item.maxPurchase === 1) {
-      setPurchasedItems(prev => new Set([...prev, item.itemId]));
+      useGameStore.setState(s => ({ shopPurchasedItems: [...(s.shopPurchasedItems ?? []), item.itemId] }));
     }
   };
 
