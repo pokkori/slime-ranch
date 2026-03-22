@@ -45,7 +45,8 @@ export default function EncyclopediaScreen() {
 
   const handleShare = useCallback(async () => {
     const state = useGameStore.getState();
-    const message = `\u30B9\u30E9\u30A4\u30E0\u7267\u5834 \u{1F40C} \u30B3\u30EC\u30AF\u30B7\u30E7\u30F3\u7387 ${collectionRate}% (${discoveredCount}/${totalCount}\u7A2E) #\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0`;
+    const GAME_URL = 'https://slime-ranch.vercel.app';
+    const message = `\u30B9\u30E9\u30A4\u30E0\u7267\u5834 \u{1F40C} \u30B3\u30EC\u30AF\u30B7\u30E7\u30F3\u7387 ${collectionRate}% (${discoveredCount}/${totalCount}\u7A2E)\n\u516836\u7A2E\u30B9\u30E9\u30A4\u30E0\u3092\u96C6\u3081\u3088\u3046\uD83D\uDC47\n${GAME_URL}\n#\u30B9\u30E9\u30A4\u30E0\u7267\u5834 #\u653E\u7F6E\u30B2\u30FC\u30E0 #\u30DE\u30FC\u30B8\u30B2\u30FC\u30E0`;
 
     // Try Canvas OGP card first
     const dataUrl = await generateShareCard({

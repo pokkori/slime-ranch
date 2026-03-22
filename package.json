@@ -40,6 +40,7 @@
     "@types/matter-js": "^0.20.2",
     "@types/react": "~19.2.2",
     "@types/uuid": "^10.0.0",
+    "canvas": "^3.2.2",
     "typescript": "~5.9.2"
   },
   "private": true

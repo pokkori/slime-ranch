@@ -645,7 +645,8 @@ export default function RanchScreen() {
   // Share card handler (R11: ViewShot ネイティブ画像シェア)
   const handleShareCard = useCallback(async () => {
     const state = useGameStore.getState();
-    const text = `スライム牧場 🐌 ランク${state.ranchRank} | 今日の合体: ${state.todayMergeCount ?? 0}回 #スライム牧場 #放置ゲーム`;
+    const GAME_URL = 'https://slime-ranch.vercel.app';
+    const text = `スライム牧場 🐌 ランク${state.ranchRank}達成！今日の合体: ${state.todayMergeCount ?? 0}回\n全36種スライムを集めよう👇\n${GAME_URL}\n#スライム牧場 #放置ゲーム #マージゲーム`;
 
     if (Platform.OS !== 'web') {
       setShowNativeShareCard(true);
@@ -702,6 +703,19 @@ export default function RanchScreen() {
       progressPercent = Math.min(100, (discoveredCount / 36) * 100);
     }
   }
+
+  // Condition text for next milestone (R15: 使いやすさ向上)
+  const conditionTexts: Record<string, string> = {
+    first_merge: '\u6700\u521D\u306E\u5408\u4F53\u3092\u3057\u3088\u3046',
+    discover_5: `\u30B9\u30E9\u30A4\u30E0\u3092\u30675\u7A2E\u767A\u898B\u3057\u3088\u3046 (${discoveredCount}/5)`,
+    tier3_owned: '\u30C6\u30A3\u30A23\u30B9\u30E9\u30A4\u30E0\u3092\u7372\u5F97\u3057\u3088\u3046',
+    discover_15: `\u30B9\u30E9\u30A4\u30E0\u3092\u300615\u7A2E\u767A\u898B\u3057\u3088\u3046 (${discoveredCount}/15)`,
+    tier5_owned: '\u30C6\u30A3\u30A25\u30B9\u30E9\u30A4\u30E0\u3092\u7372\u5F97\u3057\u3088\u3046',
+    complete_all: `\u5168\u30B9\u30E9\u30A4\u30E0\u3092\u767A\u898B\u3057\u3088\u3046 (${discoveredCount}/36)`,
+  };
+  const conditionText = nextMilestone?.condition
+    ? (conditionTexts[nextMilestone.condition] ?? nextMilestone.name)
+    : nextMilestone?.name ?? '';
 
   const rankEmojis = ['\u2B50', '\u{1F331}', '\u{1F33F}', '\u{1F333}', '\u2728', '\u{1F451}', '\u{1F308}'];
   const rankEmoji = rankEmojis[ranchRank] || '\u2B50';
@@ -762,7 +776,7 @@ export default function RanchScreen() {
         {nextMilestone && (
           <View style={styles.rankProgressContainer}>
             <Text style={styles.rankProgressLabel}>
-              {'\u6B21'}: {nextMilestone.name}
+              {'\u6B21'}: {nextMilestone.name} | {conditionText}
             </Text>
             <View style={styles.rankProgressBg}>
               <View style={[styles.rankProgressFill, { width: `${progressPercent}%` }]} />

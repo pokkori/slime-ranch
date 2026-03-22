@@ -28,11 +28,12 @@ const loadAdmob = (): boolean => {
 
 const getAdUnitId = (): string => {
   if (__DEV__) return testAdUnitId;
-  // Google公式テストID（本番リリース時は実際のIDに置換すること）
+  // 本番AdUnit ID（AdMobコンソールから取得後に必ず置換すること）
+  // 現在はテストID使用中 → 本番リリース前に実際のIDへ差し替え必須
   if (Platform.OS === 'ios') {
-    return 'ca-app-pub-3940256099942544/1712485313'; // iOS Rewarded テストID
+    return 'ca-app-pub-3940256099942544/1712485313'; // iOS Rewarded 本番ID 未取得・要置換
   }
-  return 'ca-app-pub-3940256099942544/5224354917'; // Android Rewarded テストID
+  return 'ca-app-pub-3940256099942544/5224354917'; // Android Rewarded 本番ID 未取得・要置換
 };
 
 let rewardedAd: any = null;
