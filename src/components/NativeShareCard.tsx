@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { SLIME_MASTER } from '../constants/slimes';
 
 interface NativeShareCardProps {
   slimes: any[];
@@ -39,14 +40,47 @@ export const NativeShareCard = React.forwardRef<View, NativeShareCardProps>((pro
       <Text style={styles.title}>🐌 スライム牧場</Text>
       <Text style={styles.rank}>ランク {ranchRank}</Text>
       <View style={styles.slimeRow}>
-        {top8.map((s: any, i: number) => (
-          <View
-            key={i}
-            style={[styles.slimeDot, { backgroundColor: s.color ?? '#4CAF50' }]}
-          >
-            <Text style={styles.slimeFace}>👀</Text>
-          </View>
-        ))}
+        {top8.map((s: any, i: number) => {
+          const master = SLIME_MASTER[s.masterId];
+          const color = master?.baseColor ?? s.color ?? '#4CAF50';
+          const highlight = master?.highlightColor ?? '#81C784';
+          const tier = master?.tier ?? 1;
+          const r = 14;
+          return (
+            <View key={i} style={[styles.slimeDot, {
+              backgroundColor: color,
+              width: r * 2, height: r * 2, borderRadius: r,
+              borderWidth: tier >= 3 ? 2 : 1,
+              borderColor: tier >= 5 ? '#FFD700' : 'rgba(255,255,255,0.6)',
+              overflow: 'hidden',
+            }]}>
+              {/* ハイライト */}
+              <View style={{ position: 'absolute', top: r * 0.1, left: r * 0.1, width: r, height: r,
+                borderRadius: r / 2, backgroundColor: highlight + '60' }} />
+              {/* 目（左） */}
+              <View style={{ position: 'absolute', top: r * 0.6, left: r * 0.35,
+                width: r * 0.28, height: r * 0.36, borderRadius: r * 0.14, backgroundColor: '#fff',
+                justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ width: r * 0.14, height: r * 0.14, borderRadius: r * 0.07, backgroundColor: '#333' }} />
+              </View>
+              {/* 目（右） */}
+              <View style={{ position: 'absolute', top: r * 0.6, right: r * 0.35,
+                width: r * 0.28, height: r * 0.36, borderRadius: r * 0.14, backgroundColor: '#fff',
+                justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ width: r * 0.14, height: r * 0.14, borderRadius: r * 0.07, backgroundColor: '#333' }} />
+              </View>
+              {/* ほっぺ（左） */}
+              <View style={{ position: 'absolute', top: r * 1.1, left: r * 0.2,
+                width: r * 0.28, height: r * 0.18, borderRadius: r * 0.09, backgroundColor: 'rgba(255,120,120,0.5)' }} />
+              {/* ほっぺ（右） */}
+              <View style={{ position: 'absolute', top: r * 1.1, right: r * 0.2,
+                width: r * 0.28, height: r * 0.18, borderRadius: r * 0.09, backgroundColor: 'rgba(255,120,120,0.5)' }} />
+              {tier >= 5 && (
+                <Text style={{ position: 'absolute', top: -8, fontSize: 8, alignSelf: 'center' }}>👑</Text>
+              )}
+            </View>
+          );
+        })}
       </View>
       <View style={styles.statsRow}>
         <Text style={styles.stat}>📖 {discoveredCount}/{totalCount}種</Text>

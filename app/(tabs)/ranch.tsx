@@ -104,6 +104,8 @@ export default function RanchScreen() {
   const [showStreakCalendar, setShowStreakCalendar] = useState(false);
   const [showShareBanner, setShowShareBanner] = useState(false);
   const [showWeeklyChallenge, setShowWeeklyChallenge] = useState(false);
+  const AD_BONUS_COOLDOWN_MS = 30 * 60 * 1000; // 30分
+  const [lastAdBonusTime, setLastAdBonusTime] = useState<number>(0);
 
   const [selectedSlime, setSelectedSlime] = useState<SlimeInstance | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
@@ -721,22 +723,35 @@ export default function RanchScreen() {
             </View>
           </View>
           <View style={styles.headerRight}>
-            <Pressable
-              style={styles.adBonusBtn}
-              onPress={() => {
-                const { coins, addCoins, updateMissionProgress } = useGameStore.getState();
-                showRewardedAd(
-                  () => {
-                    const bonusCoins = Math.max(100, Math.floor(coins * 0.1));
-                    addCoins(bonusCoins);
-                    updateMissionProgress('watch_ad', 1);
-                  },
-                  () => {}
-                );
-              }}
-            >
-              <Text style={styles.adBonusBtnText}>{'\u{1F3AC}'}</Text>
-            </Pressable>
+            {(() => {
+              const now = Date.now();
+              const elapsedMs = now - lastAdBonusTime;
+              const remainMs = AD_BONUS_COOLDOWN_MS - elapsedMs;
+              const onCooldown = lastAdBonusTime > 0 && remainMs > 0;
+              const remainMin = onCooldown ? Math.ceil(remainMs / 60000) : 0;
+              return (
+                <Pressable
+                  style={[styles.adBonusBtn, onCooldown && { backgroundColor: '#9E9E9E', borderColor: '#BDBDBD', opacity: 0.7 }]}
+                  onPress={() => {
+                    if (onCooldown) return;
+                    const { coins, addCoins, updateMissionProgress } = useGameStore.getState();
+                    showRewardedAd(
+                      () => {
+                        const bonusCoins = Math.max(100, Math.floor(coins * 0.1));
+                        addCoins(bonusCoins);
+                        updateMissionProgress('watch_ad', 1);
+                        setLastAdBonusTime(Date.now());
+                      },
+                      () => {}
+                    );
+                  }}
+                >
+                  <Text style={styles.adBonusBtnText}>
+                    {onCooldown ? `${remainMin}m` : '\u{1F3AC}'}
+                  </Text>
+                </Pressable>
+              );
+            })()}
             <Pressable style={styles.shareBtn} onPress={handleShareCard}>
               <Text style={styles.shareBtnText}>{'\u{1F4F7}'}</Text>
             </Pressable>

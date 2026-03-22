@@ -28,9 +28,11 @@ const loadAdmob = (): boolean => {
 
 const getAdUnitId = (): string => {
   if (__DEV__) return testAdUnitId;
-  return Platform.OS === 'ios'
-    ? 'ca-app-pub-xxxxxxxxxxxxxxxx/xxxxxxxxxx'
-    : 'ca-app-pub-xxxxxxxxxxxxxxxx/xxxxxxxxxx';
+  // Google公式テストID（本番リリース時は実際のIDに置換すること）
+  if (Platform.OS === 'ios') {
+    return 'ca-app-pub-3940256099942544/1712485313'; // iOS Rewarded テストID
+  }
+  return 'ca-app-pub-3940256099942544/5224354917'; // Android Rewarded テストID
 };
 
 let rewardedAd: any = null;
