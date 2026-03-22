@@ -31,9 +31,13 @@ const getAdUnitId = (): string => {
   // 本番AdUnit ID（AdMobコンソールから取得後に必ず置換すること）
   // 現在はテストID使用中 → 本番リリース前に実際のIDへ差し替え必須
   if (Platform.OS === 'ios') {
-    return 'ca-app-pub-3940256099942544/1712485313'; // iOS Rewarded 本番ID 未取得・要置換
+    // ⚠️ Google公式テストID（ca-app-pub-3940256099942544）を使用中
+    // App Store/Google Play登録 → AdMob本番審査通過後に実IDへ置換すること
+    return 'ca-app-pub-3940256099942544/1712485313';
   }
-  return 'ca-app-pub-3940256099942544/5224354917'; // Android Rewarded 本番ID 未取得・要置換
+  // ⚠️ Google公式テストID（ca-app-pub-3940256099942544）を使用中
+  // App Store/Google Play登録 → AdMob本番審査通過後に実IDへ置換すること
+  return 'ca-app-pub-3940256099942544/5224354917';
 };
 
 let rewardedAd: any = null;

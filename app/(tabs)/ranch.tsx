@@ -734,6 +734,7 @@ export default function RanchScreen() {
                 <Text style={styles.rankName}>{currentMilestone.name}</Text>
               )}
               <Text style={styles.todayMerge}>{`\u4ECA\u65E5\u306E\u5408\u4F53: ${todayMergeCount}\u56DE`}</Text>
+              <Text style={styles.encyclopediaCount}>{`\uD83E\uDDA0 \u56F3\u9451 ${discoveredCount}/36\u7A2E`}</Text>
             </View>
           </View>
           <View style={styles.headerRight}>
@@ -987,6 +988,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontSize: 11,
     marginTop: 1,
+  },
+  encyclopediaCount: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    marginTop: 1,
+    fontWeight: '600',
   },
   mergeCountBadge: {
     backgroundColor: 'rgba(255,215,0,0.2)',
